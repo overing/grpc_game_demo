@@ -1,0 +1,16 @@
+syntax = "proto3";
+option csharp_namespace = "GameCore.Protocols";
+
+package game_service;
+
+service GameService {
+  rpc Login(LoginRequest) returns (stream LoginResponse);
+}
+
+message LoginRequest {
+  string userId = 1;
+}
+
+message LoginResponse {
+  string message = 1;
+}
