@@ -2,7 +2,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using GameCore.Protocols;
+using GameCore.Protos;
 using Grpc.Net.Client;
 using GrpcWebSocketBridge.Client;
 using Microsoft.Extensions.Options;

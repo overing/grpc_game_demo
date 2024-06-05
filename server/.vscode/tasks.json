@@ -8,6 +8,9 @@
                 "isDefault": true,
                 "kind": "build"
             },
+            "presentation": {
+                "reveal": "silent"
+            },
             "label": "build"
         }
     ]

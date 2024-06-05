@@ -13,11 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="..\GameCore\Protos\protocols.proto" GrpcServices="Server" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\GameCOre\GameCore.csproj" />
+    <ProjectReference Include="..\GameCore\GameCore.csproj" />
   </ItemGroup>
 
 </Project>

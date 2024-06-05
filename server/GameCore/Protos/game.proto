@@ -1,5 +1,9 @@
 syntax = "proto3";
-option csharp_namespace = "GameCore.Protocols";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "GameCore.Protos";
 
 package game_service;
 
@@ -12,5 +16,6 @@ message LoginRequest {
 }
 
 message LoginResponse {
-  string message = 1;
+  google.protobuf.Timestamp ServerTime = 1;
+  string message = 2;
 }

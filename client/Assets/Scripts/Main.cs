@@ -1,6 +1,6 @@
 using System;
 using System.Threading.Tasks;
-using GameCore.Protocols;
+using GameCore.Protos;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using UnityEngine;
@@ -42,6 +42,7 @@ public sealed class Main : MonoBehaviour
         var (width, height) = (Screen.width, Screen.height);
         if (!_guiInitialized)
         {
+            GUI.skin = Resources.Load<GUISkin>("GUISkin");
             GUI.skin.label.fontSize = height / 18;
             GUI.skin.textField.fontSize = height / 20;
             GUI.skin.button.fontSize = height / 20;
@@ -94,11 +95,18 @@ public sealed class Main : MonoBehaviour
                 using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
                 {
                     GUILayout.Label("Response:", GUILayout.Width(GUI.skin.label.fontSize * 5));
-                    GUILayout.TextField(_loginTask.Result.Message, GUILayout.ExpandWidth(true));
+                    var response = _loginTask.Result;
+                    GUILayout.TextField(response.Message, GUILayout.ExpandWidth(true));
+                }
+                using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
+                {
+                    GUILayout.Label("ServerTime:", GUILayout.Width(GUI.skin.label.fontSize * 6));
+                    var response = _loginTask.Result;
+                    GUILayout.TextField(response.ServerTime.ToString(), GUILayout.ExpandWidth(true));
                 }
             }
 
-            if (_loginException is {} exception)
+            if (_loginException is { } exception)
             {
                 using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
                 {
