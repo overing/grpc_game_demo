@@ -11,6 +11,7 @@ public sealed class TitleScreen : MonoBehaviour
     bool _guiInitialized;
 
     Task<PlayerData> _loginTask;
+    Exception _loginError;
 
     void Start()
     {
@@ -32,43 +33,48 @@ public sealed class TitleScreen : MonoBehaviour
             _guiInitialized = true;
         }
 
+        bool clickStart;
         using (new GUILayout.VerticalScope(GUI.skin.box, GUILayout.Width(Screen.width), GUILayout.Height(Screen.height)))
         {
+            GUILayout.FlexibleSpace();
+
             using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
             {
                 GUILayout.Label("Client ID:", GUILayout.ExpandWidth(false));
-                GUI.enabled = false;
                 GUILayout.TextField(_userId, GUILayout.ExpandWidth(true));
-                GUI.enabled = true;
             }
 
-            if (_loginTask is null)
+            using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
             {
-                if (GUILayout.Button("Login", GUILayout.ExpandWidth(true)))
-                    _ = LoginAsync();
-            }
-            else if (!_loginTask.IsCompleted)
-            {
-                GUI.enabled = false;
-                GUILayout.Button("Login", GUILayout.ExpandWidth(true));
+                GUILayout.FlexibleSpace();
+
+                GUI.enabled = _loginTask is null;
+                clickStart = GUILayout.Button("START", GUILayout.ExpandWidth(false));
                 GUI.enabled = true;
+
+                GUILayout.FlexibleSpace();
             }
-            else if (!_loginTask.IsCanceled && _loginTask.IsFaulted)
+
+            if (_loginError is { } exception)
             {
-                var exception = _loginTask.Exception.Flatten().InnerException;
                 using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
                 {
-                    GUILayout.Label("Error:", GUILayout.Width(GUI.skin.label.fontSize * 3));
-                    GUILayout.TextField(exception.Message, GUILayout.ExpandWidth(true));
+                    GUILayout.Label("Error:", GUILayout.ExpandWidth(false));
+                    GUILayout.TextArea(exception.Message, GUILayout.ExpandWidth(true));
                 }
             }
+
+            GUILayout.FlexibleSpace();
         }
+        if (clickStart)
+            _ = LoginAsync();
     }
 
     async ValueTask LoginAsync()
     {
         try
         {
+            _loginError = null;
             var client = Service.GetRequiredService<IGameApiClient>();
             _loginTask = client.LoginAsync(_userId).AsTask();
             var data = await _loginTask;
@@ -85,6 +91,7 @@ public sealed class TitleScreen : MonoBehaviour
         }
         catch (Exception ex)
         {
+            _loginError = ex;
             Debug.LogException(ex);
             _loginTask = null;
         }

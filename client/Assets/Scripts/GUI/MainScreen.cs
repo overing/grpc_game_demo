@@ -4,15 +4,14 @@ public sealed class MainScreen : MonoBehaviour
 {
     Player _player;
 
-    void Start()
-    {
-        _player = Service.GetRequiredService<Player>();
-    }
+    void Start() => _player = Service.GetRequiredService<Player>();
 
     void OnGUI()
     {
         using (new GUILayout.VerticalScope(GUI.skin.box, GUILayout.Width(Screen.width), GUILayout.Height(Screen.height)))
         {
+            GUILayout.FlexibleSpace();
+
             using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
             {
                 GUILayout.Label("Name:", GUILayout.Width(GUI.skin.label.fontSize * 5));
@@ -21,8 +20,10 @@ public sealed class MainScreen : MonoBehaviour
             using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
             {
                 GUILayout.Label("ServerTime:", GUILayout.Width(GUI.skin.label.fontSize * 6));
-                GUILayout.TextField(_player.ServerTime.ToString(), GUILayout.ExpandWidth(true));
+                GUILayout.TextField(_player.ServerNow.ToString(), GUILayout.ExpandWidth(true));
             }
+
+            GUILayout.FlexibleSpace();
         }
     }
 }

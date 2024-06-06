@@ -12,9 +12,11 @@ public sealed class GameService(ILogger<GameService> logger) : GameCore.Protos.G
     {
         _logger.LogInformation("Login: {request.UserId}", request.UserId);
 
+        var now = DateTimeOffset.Now;
         await responseStream.WriteAsync(new()
         {
-            ServerTime = DateTimeOffset.UtcNow.ToTimestamp(),
+            ServerTime = now.ToTimestamp(),
+            ServerOffet = now.Offset.ToDuration(),
             Name = "guest-" + request.UserId,
         });
     }

@@ -17,5 +17,6 @@ message LoginRequest {
 
 message LoginResponse {
   google.protobuf.Timestamp ServerTime = 1;
-  string Name = 2;
+  google.protobuf.Duration ServerOffet = 2;
+  string Name = 3;
 }
