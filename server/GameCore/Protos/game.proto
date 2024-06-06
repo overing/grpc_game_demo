@@ -12,10 +12,10 @@ service GameService {
 }
 
 message LoginRequest {
-  string userId = 1;
+  string UserId = 1;
 }
 
 message LoginResponse {
   google.protobuf.Timestamp ServerTime = 1;
-  string message = 2;
+  string Name = 2;
 }
