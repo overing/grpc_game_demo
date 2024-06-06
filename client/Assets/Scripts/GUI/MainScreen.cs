@@ -2,9 +2,14 @@ using UnityEngine;
 
 public sealed class MainScreen : MonoBehaviour
 {
+    ServerTime _serverTime;
     Player _player;
 
-    void Start() => _player = Service.GetRequiredService<Player>();
+    void Start()
+    {
+        _serverTime = Service.GetRequiredService<ServerTime>();
+        _player = Service.GetRequiredService<Player>();
+    }
 
     void OnGUI()
     {
@@ -14,13 +19,13 @@ public sealed class MainScreen : MonoBehaviour
 
             using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
             {
-                GUILayout.Label("Name:", GUILayout.Width(GUI.skin.label.fontSize * 5));
-                GUILayout.TextField(_player.Name, GUILayout.ExpandWidth(true));
+                GUILayout.Label("ServerTime:", GUILayout.Width(GUI.skin.label.fontSize * 6));
+                GUILayout.TextField(_serverTime.Now.ToString(), GUILayout.ExpandWidth(true));
             }
             using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
             {
-                GUILayout.Label("ServerTime:", GUILayout.Width(GUI.skin.label.fontSize * 6));
-                GUILayout.TextField(_player.ServerNow.ToString(), GUILayout.ExpandWidth(true));
+                GUILayout.Label("Name:", GUILayout.Width(GUI.skin.label.fontSize * 5));
+                GUILayout.TextField(_player.Name, GUILayout.ExpandWidth(true));
             }
 
             GUILayout.FlexibleSpace();

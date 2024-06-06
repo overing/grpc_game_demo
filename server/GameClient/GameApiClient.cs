@@ -36,7 +36,7 @@ namespace GameClient
             GC.SuppressFinalize(this);
         }
 
-        public async ValueTask<PlayerData> LoginAsync(string userId, CancellationToken cancellationToken = default)
+        public async ValueTask<LoginData> LoginAsync(string userId, CancellationToken cancellationToken = default)
         {
             if (userId is null)
                 throw new ArgumentNullException(nameof(userId));
@@ -47,14 +47,20 @@ namespace GameClient
             await call.ResponseStream.MoveNext(cancellationToken);
 
             var response = call.ResponseStream.Current;
+
             var serverTime = response.ServerTime.ToDateTimeOffset();
             serverTime = serverTime.ToOffset(response.ServerOffet.ToTimeSpan());
 
-            return new PlayerData
-            {
-                ServerTime = serverTime,
-                Name = response.Name,
-            };
+            var user = new UserData(
+                ID: Guid.Parse(response.User.ID),
+                Name: response.User.Name,
+                Email: response.User.Email);
+
+            var reply = new LoginData(
+                ServerTime: serverTime,
+                User: user);
+
+            return reply;
         }
     }
 }

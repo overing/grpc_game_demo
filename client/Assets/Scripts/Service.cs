@@ -22,6 +22,7 @@ public static class Service
                 DisposeHttpClient = true,
             }))
             .AddGameClient(disposeChannel: true, lifetime: ServiceLifetime.Singleton)
+            .AddSingleton<ServerTime>()
             .AddSingleton<Player>()
             .BuildServiceProvider();
 

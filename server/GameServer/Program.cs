@@ -1,6 +1,8 @@
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddGameRepository();
+
 builder.Services.AddGrpc(options =>
 {
     options.EnableDetailedErrors = true;
@@ -30,4 +32,4 @@ app.UseGrpcWebSocketBridge();
 app.MapGrpcService<GameServer.GrpcServices.GameService>();
 app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
 
-app.Run();
+app.Run("http://localhost:5000");

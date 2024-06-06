@@ -1,0 +1,12 @@
+services:
+  db:
+    image: mysql:latest
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=d116e80149c94a8491822894c1ccefd0
+
+  cache:
+    image: redis:latest
+    ports:
+      - "6379:6379"

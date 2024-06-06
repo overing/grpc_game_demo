@@ -10,7 +10,7 @@ public sealed class TitleScreen : MonoBehaviour
 
     bool _guiInitialized;
 
-    Task<PlayerData> _loginTask;
+    Task<LoginData> _loginTask;
     Exception _loginError;
 
     void Start()
@@ -79,8 +79,11 @@ public sealed class TitleScreen : MonoBehaviour
             _loginTask = client.LoginAsync(_userId).AsTask();
             var data = await _loginTask;
 
+            var serverTime = Service.GetRequiredService<ServerTime>();
+            serverTime.Load(data.ServerTime);
+
             var player = Service.GetRequiredService<Player>();
-            player.Load(data);
+            player.Load(data.User);
 
             new GameObject(nameof(MainScreen), typeof(MainScreen));
             Destroy(gameObject);

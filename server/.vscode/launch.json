@@ -7,7 +7,7 @@
             "request": "launch",
             "preLaunchTask": "build",
             "program": "${workspaceFolder}/artifacts/bin/GameServer/debug/GameServer.exe",
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/GameServer",
             "stopAtEntry": false,
             "env": {
                 "ASPNETCORE_ENVIRONMENT": "Development"
