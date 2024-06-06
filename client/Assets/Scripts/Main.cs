@@ -24,7 +24,7 @@ public sealed class Main : MonoBehaviour
             .AddTransient<IGameApiClient, GameApiClient>()
             .Configure<GameApiClientOptions>(options =>
             {
-                options.Address = "http://localhost:5000";
+                options.Address = "https://localhost:5001";
             })
             .BuildServiceProvider();
     }
@@ -84,6 +84,7 @@ public sealed class Main : MonoBehaviour
             else if (_loginTask.IsFaulted)
             {
                 _loginException = _loginTask.Exception.Flatten();
+                Debug.LogException(_loginException);
                 _loginTask = null;
             }
             else if (_loginTask.IsCanceled)

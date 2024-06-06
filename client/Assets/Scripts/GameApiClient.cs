@@ -4,7 +4,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using GameCore.Protos;
 using Grpc.Net.Client;
-using GrpcWebSocketBridge.Client;
 using Microsoft.Extensions.Options;
 
 public interface IGameApiClient
@@ -19,15 +18,24 @@ public sealed class GameApiClientOptions
 
 public sealed class GameApiClient : IGameApiClient, IDisposable
 {
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+    [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.BeforeSceneLoad)]
+    static void InitializeSynchronizationContext() => SynchronizationContext.SetSynchronizationContext(null);
+#endif
+
     bool _disposed;
     GrpcChannel _grpcChannel;
     readonly GameService.GameServiceClient _serviceClient;
 
     public GameApiClient(IOptions<GameApiClientOptions> options)
     {
+        var handler = new GrpcWebSocketBridge.Client.GrpcWebSocketBridgeHandler
+        {
+        };
         _grpcChannel = GrpcChannel.ForAddress(options.Value.Address, new()
         {
-            HttpHandler = new GrpcWebSocketBridgeHandler(),
+            HttpHandler = handler,
             DisposeHttpClient = true,
         });
         _serviceClient = new GameService.GameServiceClient(_grpcChannel);
