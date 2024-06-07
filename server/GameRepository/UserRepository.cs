@@ -65,6 +65,7 @@ internal sealed class UserRepository(
         var affected = await dbContext.SaveChangesAsync(cancellationToken);
         if (affected == 0)
             throw new Exception("Save to db affected row is 0.");
+
         return new(user.ID, user.Name, user.Email);
     }
 }

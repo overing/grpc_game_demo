@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Server",
+            "name": "GameServer",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
@@ -12,7 +12,12 @@
             "env": {
                 "ASPNETCORE_ENVIRONMENT": "Development"
             },
-            "externalConsole": true
+            "externalConsole": true,
+            "serverReadyAction":{
+                "action": "openExternally",
+                "pattern": "Now listening on: http://(\\S+):([0-9]+)",
+                "uriFormat": "http://%s:8080"
+            }
         }
 
     ]

@@ -20,19 +20,9 @@ public static class ServiceCollectionGameRepositoryExtensions
                 options.UseMySql(connectionString, serverVersion);
             })
             .AddSingleton<IEntityTypeConfiguration<User>, UserConfig>()
+            .AddHostedService<DatabaseStartup>()
 
             .AddTransient<IUserRepository, UserRepository>()
-            .AddSingleton(TimeProvider.System)
-
-            // .AddSingleton(provider =>
-            // {
-            //     var configuration = provider.GetRequiredService<IConfiguration>();
-            //     var connectionString = configuration.GetConnectionString("cache");
-            //     return new RedisConfiguration { ConnectionString = connectionString };
-            // })
-            // .AddSingleton<IRedisClientFactory, RedisClientFactory>()
-            // .AddSingleton<ISerializer, SystemTextJsonSerializer>()
-            // .Decorate<IUserRepository, CachedUserRepository>()
-            ;
+            .AddSingleton(TimeProvider.System);
     }
 }

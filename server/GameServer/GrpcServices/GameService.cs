@@ -1,13 +1,13 @@
 using Grpc.Core;
 using GameCore.Protos;
+using GameServer.Grains;
 using Google.Protobuf.WellKnownTypes;
-using GameRepository;
 
 namespace GameServer.GrpcServices;
 
 public sealed class GameService(
     ILogger<GameService> logger,
-    IUserRepository userRepository)
+    IClusterClient clusterClient)
     : GameCore.Protos.GameService.GameServiceBase
 {
     readonly ILogger<GameService> _logger = logger;
@@ -16,20 +16,23 @@ public sealed class GameService(
     {
         _logger.LogInformation("Login: {request.UserId}", request.UserId);
 
-        var user = await userRepository.GetWithAccountAsync(request.UserId, context.CancellationToken);
-        user ??= await userRepository.CreateAsync(request.UserId, "Guest-" + request.UserId, "none@none", context.CancellationToken);
-
-        var now = DateTimeOffset.Now;
-        await responseStream.WriteAsync(new()
+        using var cts = new GrainCancellationTokenSource();
+        using (context.CancellationToken.Register(static state => ((GrainCancellationTokenSource)state!).Cancel().Ignore(), cts))
         {
-            ServerTime = now.ToTimestamp(),
-            ServerOffet = now.Offset.ToDuration(),
-            User = new()
+            var user = clusterClient.GetGrain<IUserGrain>(request.UserId);
+            var data = await user.LoginAsync(cts.Token);
+            var response = new LoginResponse
             {
-                ID = user.ID.ToString("N"),
-                Name = user.Name,
-                Email = user.Email,
-            },
-        });
+                ServerTime = data.ServerTime.ToTimestamp(),
+                ServerOffet = data.ServerTime.Offset.ToDuration(),
+                User = new User
+                {
+                    ID = data.User.ID.ToString("N"),
+                    Name = data.User.Name,
+                    Email = data.User.Email,
+                },
+            };
+            await responseStream.WriteAsync(response);
+        }
     }
 }

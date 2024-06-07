@@ -11,6 +11,12 @@ service GameService {
   rpc Login(LoginRequest) returns (stream LoginResponse);
 }
 
+message User {
+  string ID = 1;
+  string Name = 2;
+  string Email = 3;
+}
+
 message LoginRequest {
   string UserId = 1;
 }
@@ -18,11 +24,5 @@ message LoginRequest {
 message LoginResponse {
   google.protobuf.Timestamp ServerTime = 1;
   google.protobuf.Duration ServerOffet = 2;
-  UserMessage User = 3;
-}
-
-message UserMessage {
-  string ID = 1;
-  string Name = 2;
-  string Email = 3;
+  User User = 3;
 }

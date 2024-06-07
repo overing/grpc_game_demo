@@ -1,25 +1,36 @@
+using Orleans.Serialization;
 
-var builder = WebApplication.CreateBuilder(args);
+var appBuilder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddGameRepository();
+appBuilder.Services.AddGameRepository();
 
-builder.Services.AddGrpc(options =>
+appBuilder.Services.AddOrleans(siloBuilder =>
 {
-    options.EnableDetailedErrors = true;
-});
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
+    siloBuilder.UseLocalhostClustering();
+    siloBuilder.UseDashboard();
+    siloBuilder.Services.AddSerializer(serializerBuilder =>
     {
-        policy.AllowAnyMethod();
-        policy.AllowAnyOrigin();
-        policy.AllowAnyHeader();
-
-        policy.WithExposedHeaders("grpc-status", "grpc-message");
+        serializerBuilder.AddJsonSerializer(isSupported: type => type.Namespace!.StartsWith("GameCore.Models"));
     });
 });
 
-var app = builder.Build();
+appBuilder.Services.AddGrpc(options =>
+{
+    options.EnableDetailedErrors = true;
+});
+appBuilder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policyBuilder =>
+    {
+        policyBuilder.AllowAnyMethod();
+        policyBuilder.AllowAnyOrigin();
+        policyBuilder.AllowAnyHeader();
+
+        policyBuilder.WithExposedHeaders("grpc-status", "grpc-message");
+    });
+});
+
+var app = appBuilder.Build();
 
 app.UseCors();
 app.UseWebSockets();

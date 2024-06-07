@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="Medo.Uuid7.EntityFrameworkCore" Version="1.9.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.0" />
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
   </ItemGroup>
 
