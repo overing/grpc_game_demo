@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 option csharp_namespace = "GameCore.Protos";
@@ -8,7 +9,14 @@ option csharp_namespace = "GameCore.Protos";
 package game_service;
 
 service GameService {
-  rpc Login(LoginRequest) returns (stream LoginResponse);
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc Echo(EchoRequest) returns (EchoResponse);
+  rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+
+message TimeOffset {
+  google.protobuf.Timestamp Time = 1;
+  google.protobuf.Duration Offset = 2;
 }
 
 message User {
@@ -18,11 +26,21 @@ message User {
 }
 
 message LoginRequest {
-  string UserId = 1;
+  string Account = 1;
 }
 
 message LoginResponse {
-  google.protobuf.Timestamp ServerTime = 1;
-  google.protobuf.Duration ServerOffet = 2;
-  User User = 3;
+  TimeOffset ServerTime = 1;
+  User User = 2;
+}
+
+message EchoRequest {
+  TimeOffset ClientTime = 1;
+}
+
+message EchoResponse {
+  google.protobuf.Duration ClientToGateway = 1;
+  google.protobuf.Duration GatewayToSilo = 2;
+  google.protobuf.Duration SiloToGateway = 3;
+  TimeOffset SiloTime = 4;
 }

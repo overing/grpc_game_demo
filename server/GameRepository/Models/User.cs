@@ -21,6 +21,9 @@ public sealed record class User
     [Column("email")]
     public string Email { get; set; } = null!;
 
+    [Column("last_login_at")]
+    public DateTimeOffset LastLoginAt { get; set; }
+
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; }
 

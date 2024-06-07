@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using GameRepository.Models;
 using GameCore.Models;
 
-namespace GameRepository;
+namespace GameRepository.Repositories;
 
 public interface IUserRepository
 {
@@ -18,6 +18,8 @@ public interface IUserRepository
         string name,
         string email,
         CancellationToken cancellationToken = default);
+
+    ValueTask UpdateLoginTimeAsync(Guid id, DateTimeOffset dateTime);
 }
 
 internal sealed class UserRepository(
@@ -51,13 +53,14 @@ internal sealed class UserRepository(
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
 
-        var now = timeProvider.GetUtcNow();
+        var now = timeProvider.GetLocalNow();
         var user = new User
         {
             ID = Uuid7.NewGuid(),
             Account = account,
             Name = name,
             Email = email,
+            LastLoginAt = now,
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -67,5 +70,17 @@ internal sealed class UserRepository(
             throw new Exception("Save to db affected row is 0.");
 
         return new(user.ID, user.Name, user.Email);
+    }
+
+    public async ValueTask UpdateLoginTimeAsync(Guid id, DateTimeOffset dateTime)
+    {
+        var user = await dbContext.Set<User>().FirstOrDefaultAsync(u => u.ID == id);
+
+        if (user is null)
+            return;
+
+        user.LastLoginAt = dateTime;
+
+        await dbContext.SaveChangesAsync();
     }
 }

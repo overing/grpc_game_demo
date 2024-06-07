@@ -44,16 +44,9 @@ public sealed class TitleScreen : MonoBehaviour
                 GUILayout.TextField(_userId, GUILayout.ExpandWidth(true));
             }
 
-            using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
-            {
-                GUILayout.FlexibleSpace();
-
-                GUI.enabled = _loginTask is null;
-                clickStart = GUILayout.Button("START", GUILayout.ExpandWidth(false));
-                GUI.enabled = true;
-
-                GUILayout.FlexibleSpace();
-            }
+            GUI.enabled = _loginTask is null;
+            clickStart = GUILayout.Button("START", GUILayout.ExpandWidth(false));
+            GUI.enabled = true;
 
             if (_loginError is { } exception)
             {
@@ -76,7 +69,7 @@ public sealed class TitleScreen : MonoBehaviour
         {
             _loginError = null;
             var client = Service.GetRequiredService<IGameApiClient>();
-            _loginTask = client.LoginAsync(_userId).AsTask();
+            _loginTask = client.LoginAsync(_userId, destroyCancellationToken).AsTask();
             var data = await _loginTask;
 
             var serverTime = Service.GetRequiredService<ServerTime>();

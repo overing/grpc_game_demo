@@ -1,3 +1,6 @@
+using GameServer.Extensions;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Orleans.Configuration;
 using Orleans.Serialization;
 
 var appBuilder = WebApplication.CreateBuilder(args);
@@ -6,7 +9,9 @@ appBuilder.Services.AddGameRepository();
 
 appBuilder.Services.AddOrleans(siloBuilder =>
 {
-    siloBuilder.UseLocalhostClustering();
+    // siloBuilder.UseLocalhostClustering();
+    siloBuilder.Services.Configure<ClusterOptions>(appBuilder.Configuration.GetSection(nameof(ClusterOptions)));
+    siloBuilder.UseRedisClustering(appBuilder.Configuration.GetConnectionString("cache"));
     siloBuilder.UseDashboard();
     siloBuilder.Services.AddSerializer(serializerBuilder =>
     {
@@ -14,10 +19,19 @@ appBuilder.Services.AddOrleans(siloBuilder =>
     });
 });
 
+appBuilder.Services
+    .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
+    {
+        options.EventsType = typeof(CustomCookieAuthenticationEvents);
+    }).Services
+    .AddScoped<CustomCookieAuthenticationEvents>();
+
 appBuilder.Services.AddGrpc(options =>
 {
     options.EnableDetailedErrors = true;
 });
+
 appBuilder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policyBuilder =>
@@ -34,9 +48,12 @@ var app = appBuilder.Build();
 
 app.UseCors();
 app.UseWebSockets();
+
 app.UseGrpcWebSocketRequestRoutingEnabler();
 
 app.UseRouting();
+
+app.UseAuthentication();
 
 app.UseGrpcWebSocketBridge();
 
