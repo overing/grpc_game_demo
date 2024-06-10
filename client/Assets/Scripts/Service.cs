@@ -6,17 +6,20 @@ using UnityEngine;
 
 public static class Service
 {
-    static readonly string _serverAddress = "http://localhost:5000";
+    static readonly string ServerAddress = "http://localhost:5000";
     static IServiceProvider _serviceProvider;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void InitializeSynchronizationContext()
     {
         if (!Application.isEditor && Application.platform == RuntimePlatform.WebGLPlayer)
+        {
             System.Threading.SynchronizationContext.SetSynchronizationContext(null); // for WebGL Grpc working
+            OverrideFatchCookieRewrite(ServerAddress);
+        }
 
         _serviceProvider = new ServiceCollection()
-            .AddTransient<ChannelBase>(_ => GrpcChannel.ForAddress(_serverAddress, new()
+            .AddTransient<ChannelBase>(_ => GrpcChannel.ForAddress(ServerAddress, new()
             {
                 HttpHandler = new GrpcWebSocketBridge.Client.GrpcWebSocketBridgeHandler(),
                 DisposeHttpClient = true,
@@ -49,4 +52,7 @@ public static class Service
     public static TService GetService<TService>() => _serviceProvider.GetService<TService>();
 
     public static TService GetRequiredService<TService>() => _serviceProvider.GetRequiredService<TService>();
+
+    [System.Runtime.InteropServices.DllImport("__Internal")]
+    static extern void OverrideFatchCookieRewrite(string urlPrefix);
 }

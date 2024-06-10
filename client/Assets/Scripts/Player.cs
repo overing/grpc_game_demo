@@ -1,6 +1,4 @@
-using System;
 using GameCore.Models;
-using UnityEngine;
 
 public sealed class Player
 {

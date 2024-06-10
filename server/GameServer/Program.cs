@@ -9,7 +9,6 @@ appBuilder.Services.AddGameRepository();
 
 appBuilder.Services.AddOrleans(siloBuilder =>
 {
-    // siloBuilder.UseLocalhostClustering();
     siloBuilder.Services.Configure<ClusterOptions>(appBuilder.Configuration.GetSection(nameof(ClusterOptions)));
     siloBuilder.UseRedisClustering(appBuilder.Configuration.GetConnectionString("cache"));
     siloBuilder.UseDashboard();
@@ -36,11 +35,12 @@ appBuilder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policyBuilder =>
     {
-        policyBuilder.AllowAnyMethod();
-        policyBuilder.AllowAnyOrigin();
-        policyBuilder.AllowAnyHeader();
-
-        policyBuilder.WithExposedHeaders("grpc-status", "grpc-message");
+        policyBuilder
+            .SetIsOriginAllowed(origin => new Uri(origin).Host == "localhost")
+            .AllowAnyMethod()
+            .AllowCredentials()
+            .AllowAnyHeader()
+            .WithExposedHeaders("grpc-status", "grpc-message");
     });
 });
 
