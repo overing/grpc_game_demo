@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using GameCore.Models;
@@ -77,6 +79,46 @@ sealed class GameApiClient : IGameApiClient, IDisposable
             GatewayToSilo: response.GatewayToSilo.ToTimeSpan(),
             SiloToGateway: response.SiloToGateway.ToTimeSpan(),
             SiloTime: response.SiloTime.ToDateTimeOffset());
+
+        return data;
+    }
+
+    public async IAsyncEnumerable<SyncCharacterData> SyncCharactersAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var request = new SyncCharactersRequest { MapCode = 1 };
+
+        var call = _client.SyncCharacters(request, cancellationToken: cancellationToken);
+        while (await call.ResponseStream.MoveNext())
+        {
+            var item = call.ResponseStream.Current;
+            var character = item.Character;
+
+            var characterData = new CharacterData(
+                ID: Guid.Parse(character.ID),
+                Name: character.Name,
+                Skin: character.Skin,
+                Position: (character.Position.X, character.Position.Y));
+            var data = new SyncCharacterData(
+                Action: (SyncCharacterAction)item.Action,
+                Character: characterData);
+
+            yield return data;
+        }
+    }
+
+    public async ValueTask<CharacterData> MoveAsync(float x, float y, CancellationToken cancellationToken = default)
+    {
+        var request = new MoveRequest { Position = new Vector2 { X = x, Y = y } };
+
+        var response = await _client.MoveAsync(request, cancellationToken: cancellationToken);
+
+        var character = response.Character;
+
+        var data = new CharacterData(
+                ID: Guid.Parse(character.ID),
+                Name: character.Name,
+                Skin: character.Skin,
+                Position: (character.Position.X, character.Position.Y));
 
         return data;
     }

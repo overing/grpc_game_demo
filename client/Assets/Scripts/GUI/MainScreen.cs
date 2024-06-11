@@ -1,7 +1,6 @@
 using System;
 using System.Threading.Tasks;
 using GameClient;
-using GameCore.Models;
 using Grpc.Core;
 using UnityEngine;
 
@@ -25,8 +24,6 @@ public sealed class MainScreen : MonoBehaviour
         bool clickLogout;
         using (new GUILayout.VerticalScope(GUI.skin.box, GUILayout.Width(Screen.width), GUILayout.Height(Screen.height)))
         {
-            GUILayout.FlexibleSpace();
-
             using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
             {
                 GUILayout.Label("ServerTime:", GUILayout.Width(GUI.skin.label.fontSize * 6));
@@ -54,8 +51,6 @@ public sealed class MainScreen : MonoBehaviour
                     GUILayout.TextArea(result, GUILayout.ExpandWidth(true));
                 }
             }
-
-            GUILayout.FlexibleSpace();
         }
         if (clickEcho)
             _ = EchoAsync();

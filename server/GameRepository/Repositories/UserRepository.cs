@@ -11,6 +11,8 @@ public interface IUserRepository
 {
     IAsyncEnumerable<UserData> GetAllAsync(CancellationToken cancellationToken = default);
 
+    ValueTask<UserData?> GetWithIdAsync(Guid id, CancellationToken cancellationToken = default);
+
     ValueTask<UserData?> GetWithAccountAsync(string account, CancellationToken cancellationToken = default);
 
     ValueTask<UserData> CreateAsync(
@@ -31,6 +33,14 @@ internal sealed class UserRepository(
     {
         await foreach (var user in dbContext.Set<User>().AsNoTracking().AsAsyncEnumerable().WithCancellation(cancellationToken))
             yield return new(user.ID, user.Name, user.Email);
+    }
+
+    public async ValueTask<UserData?> GetWithIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Set<User>()
+            .Where(u => u.ID == id)
+            .Select(u => new UserData(u.ID, u.Name, u.Email))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async ValueTask<UserData?> GetWithAccountAsync(string account, CancellationToken cancellationToken = default)

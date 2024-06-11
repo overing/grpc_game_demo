@@ -11,6 +11,8 @@ package game_service;
 service GameService {
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc Echo(EchoRequest) returns (EchoResponse);
+  rpc SyncCharacters(SyncCharactersRequest) returns (stream SyncCharactersResponse);
+  rpc Move(MoveRequest) returns (MoveResponse);
   rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
@@ -23,6 +25,18 @@ message User {
   string ID = 1;
   string Name = 2;
   string Email = 3;
+}
+
+message Vector2 {
+  float X = 1;
+  float Y = 2;
+}
+
+message Character {
+  string ID = 1;
+  string Name = 2;
+  int32 Skin = 3;
+  Vector2 Position = 4;
 }
 
 message LoginRequest {
@@ -43,4 +57,21 @@ message EchoResponse {
   google.protobuf.Duration GatewayToSilo = 2;
   google.protobuf.Duration SiloToGateway = 3;
   TimeOffset SiloTime = 4;
+}
+
+message SyncCharactersRequest {
+  int32 MapCode = 1;
+}
+
+message SyncCharactersResponse {
+  int32 Action = 1;
+  Character Character = 2;
+}
+
+message MoveRequest {
+  Vector2 Position = 1;
+}
+
+message MoveResponse {
+  Character Character = 1;
 }

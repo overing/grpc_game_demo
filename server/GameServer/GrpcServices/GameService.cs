@@ -1,11 +1,11 @@
-using Grpc.Core;
+using System.Security.Claims;
 using GameCore.Protos;
+using GameRepository.Repositories;
 using GameServer.Grains;
 using Google.Protobuf.WellKnownTypes;
-using System.Security.Claims;
-using Microsoft.AspNetCore.Authentication.Cookies;
+using Grpc.Core;
 using Microsoft.AspNetCore.Authentication;
-using GameRepository.Repositories;
+using Microsoft.AspNetCore.Authentication.Cookies;
 
 namespace GameServer.GrpcServices;
 
@@ -91,6 +91,96 @@ public sealed class GameService(
                 GatewayToSilo = data.GatewayToSilo.ToDuration(),
                 SiloToGateway = (timeProvider.GetLocalNow() - data.SiloTime).ToDuration(),
                 SiloTime = data.SiloTime.ToTimeOffset(),
+            };
+            return response;
+        }
+    }
+
+    public override async Task SyncCharacters(SyncCharactersRequest request, IServerStreamWriter<SyncCharactersResponse> responseStream, ServerCallContext context)
+    {
+        _logger.LogInformation("SyncCharacters");
+
+        var identity = context.GetHttpContext().User.Identity;
+        if (identity is not ClaimsIdentity id ||
+            id.Claims.FirstOrDefault(c => c.Type == "GameUserID") is not Claim claim ||
+            claim.Value is not string userId)
+        {
+            context.Status = new Status(StatusCode.Unauthenticated, "Need login.");
+            return;
+        }
+
+        using var cts = new GrainCancellationTokenSource();
+        using (context.CancellationToken.Register(static state => ((GrainCancellationTokenSource)state!).Cancel().Ignore(), cts))
+        {
+            var user = _clusterClient.GetGrain<IUserGrain>(userId);
+            var userData = await user.GetDataAsync(cts.Token);
+
+            var observer = new MapCharacterObserver(userData);
+            var observerReference = _clusterClient.CreateObjectReference<IMapCharacterObserver>(observer);
+
+            var map = _clusterClient.GetGrain<IMapGrain>(request.MapCode);
+            await map.SyncCharactersAsync(observerReference);
+
+            await foreach (var data in observer.WithCancellation(context.CancellationToken))
+            {
+                var characterData = data.Character;
+                var item = new SyncCharactersResponse
+                {
+                    Action = (int)data.Action,
+                    Character = new Character
+                    {
+                        ID = characterData.ID.ToString("N"),
+                        Name = characterData.Name,
+                        Skin = characterData.Skin,
+                        Position = new Vector2
+                        {
+                            X = characterData.Position.x,
+                            Y = characterData.Position.y,
+                        },
+                    },
+                };
+                await responseStream.WriteAsync(item, context.CancellationToken);
+            }
+
+            await map.UnsyncCharactersAsync(observerReference);
+        }
+    }
+
+    public override async Task<MoveResponse> Move(MoveRequest request, ServerCallContext context)
+    {
+        _logger.LogInformation("Move: {request.Position}", new { request.Position.X, request.Position.Y });
+
+        var identity = context.GetHttpContext().User.Identity;
+        if (identity is not ClaimsIdentity id ||
+            id.Claims.FirstOrDefault(c => c.Type == "GameUserID") is not Claim claim ||
+            claim.Value is not string userId)
+        {
+            context.Status = new Status(StatusCode.Unauthenticated, "Need login.");
+            return new();
+        }
+
+        using var cts = new GrainCancellationTokenSource();
+        using (context.CancellationToken.Register(static state => ((GrainCancellationTokenSource)state!).Cancel().Ignore(), cts))
+        {
+            var user = _clusterClient.GetGrain<IUserGrain>(userId);
+            var mapCode = await user.GetMapCodeAsync(cts.Token);
+
+            var map = _clusterClient.GetGrain<IMapGrain>(mapCode);
+            var characterData = await map.MoveAsync(Guid.Parse(userId), request.Position.X, request.Position.Y, cts.Token);
+
+            var response = new MoveResponse
+            {
+                Character = new Character
+                {
+                    ID = characterData.ID.ToString("N"),
+                    Name = characterData.Name,
+                    Skin = characterData.Skin,
+                    Position = new Vector2
+                    {
+                        X = characterData.Position.x,
+                        Y = characterData.Position.y,
+                    },
+                },
             };
             return response;
         }
