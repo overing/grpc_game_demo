@@ -46,8 +46,15 @@ public static class Service
 #endif
     }
 
+    // [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    // static void CreateTitleScreen() => new GameObject(nameof(TitleScreen), typeof(TitleScreen));
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    static void AfterSceneLoad() => new GameObject(nameof(TitleScreen), typeof(TitleScreen));
+    static void CreateTestScreen()
+    {
+        var prefab = Resources.Load<GameObject>("Prefabs/Character");
+        UnityEngine.Object.Instantiate(prefab, Vector3.zero, Quaternion.identity);
+    }
 
     public static TService GetService<TService>() => _serviceProvider.GetService<TService>();
 
