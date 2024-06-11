@@ -39,6 +39,7 @@ public sealed class GameService(
             var sessionId = Guid.NewGuid().ToString("N");
             var claims = new[]
             {
+                new Claim(ClaimTypes.Name, data.User.Name),
                 new Claim("GameUserID", userId),
                 new Claim("SessionID", sessionId),
             };
@@ -112,34 +113,40 @@ public sealed class GameService(
         using var cts = new GrainCancellationTokenSource();
         using (context.CancellationToken.Register(static state => ((GrainCancellationTokenSource)state!).Cancel().Ignore(), cts))
         {
+            var observer = new MapCharacterObserver();
+            var observerReference = _clusterClient.CreateObjectReference<IMapCharacterObserver>(observer);
+
             var user = _clusterClient.GetGrain<IUserGrain>(userId);
             var userData = await user.GetDataAsync(cts.Token);
 
-            var observer = new MapCharacterObserver(userData);
-            var observerReference = _clusterClient.CreateObjectReference<IMapCharacterObserver>(observer);
-
             var map = _clusterClient.GetGrain<IMapGrain>(request.MapCode);
-            await map.SyncCharactersAsync(observerReference);
+            await map.SyncCharactersAsync(userId, observerReference, cts.Token);
 
-            await foreach (var data in observer.WithCancellation(context.CancellationToken))
+            try
             {
-                var characterData = data.Character;
-                var item = new SyncCharactersResponse
+                await foreach (var data in observer.WithCancellation(context.CancellationToken))
                 {
-                    Action = (int)data.Action,
-                    Character = new Character
+                    var characterData = data.Character;
+                    var item = new SyncCharactersResponse
                     {
-                        ID = characterData.ID.ToString("N"),
-                        Name = characterData.Name,
-                        Skin = characterData.Skin,
-                        Position = new Vector2
+                        Action = (int)data.Action,
+                        Character = new Character
                         {
-                            X = characterData.Position.x,
-                            Y = characterData.Position.y,
+                            ID = characterData.ID.ToString("N"),
+                            Name = characterData.Name,
+                            Skin = characterData.Skin,
+                            Position = new Vector2
+                            {
+                                X = characterData.Position.x,
+                                Y = characterData.Position.y,
+                            },
                         },
-                    },
-                };
-                await responseStream.WriteAsync(item, context.CancellationToken);
+                    };
+                    await responseStream.WriteAsync(item, context.CancellationToken);
+                }
+            }
+            catch (OperationCanceledException)
+            {
             }
 
             await map.UnsyncCharactersAsync(observerReference);

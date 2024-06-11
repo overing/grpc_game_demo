@@ -8,12 +8,9 @@ public interface IMapCharacterObserver : IGrainObserver
 {
     [Alias("Receive")]
     ValueTask Receive(SyncCharacterData data);
-
-    [Alias("Get")]
-    ValueTask<CharacterData> Get();
 }
 
-sealed class MapCharacterObserver(UserData userData) : IMapCharacterObserver, IAsyncEnumerable<SyncCharacterData>
+sealed class MapCharacterObserver : IMapCharacterObserver, IAsyncEnumerable<SyncCharacterData>
 {
     readonly Channel<SyncCharacterData> _channel = Channel.CreateUnbounded<SyncCharacterData>();
 
@@ -25,11 +22,4 @@ sealed class MapCharacterObserver(UserData userData) : IMapCharacterObserver, IA
 
     public ValueTask Receive(SyncCharacterData data)
         => _channel.Writer.WriteAsync(data);
-
-    public ValueTask<CharacterData> Get()
-        => ValueTask.FromResult(new CharacterData(
-            ID: userData.ID,
-            Name: userData.Name,
-            Skin: 1,
-            Position: (0, 0)));
 }

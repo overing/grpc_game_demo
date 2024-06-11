@@ -7,7 +7,7 @@ namespace GameServer.Grains;
 public interface IMapGrain : IGrainWithIntegerKey
 {
     [Alias("SyncCharactersAsync")]
-    ValueTask SyncCharactersAsync(IMapCharacterObserver mapCharacter);
+    ValueTask SyncCharactersAsync(string userId, IMapCharacterObserver mapCharacter, GrainCancellationToken grainCancellationToken);
 
     [Alias("UnsyncCharactersAsync")]
     ValueTask UnsyncCharactersAsync(IMapCharacterObserver mapCharacter);
@@ -17,25 +17,27 @@ public interface IMapGrain : IGrainWithIntegerKey
 }
 
 sealed class MapGrain(
-    ILogger<MapGrain> logger)
+    ILogger<MapGrain> logger,
+    IGrainFactory grainFactory)
     : Grain, IMapGrain
 {
     readonly IDictionary<Guid, CharacterData> _characters = new Dictionary<Guid, CharacterData>();
 
     readonly ObserverManager<IMapCharacterObserver> _observers = new(TimeSpan.FromMinutes(3), logger);
 
-    public async ValueTask SyncCharactersAsync(IMapCharacterObserver mapCharacter)
+    public async ValueTask SyncCharactersAsync(string userId, IMapCharacterObserver mapCharacter, GrainCancellationToken grainCancellationToken)
     {
-        var character = await mapCharacter.Get();
-        _characters.Add(character.ID, character);
+        var user = grainFactory.GetGrain<IUserGrain>(userId);
+        var userData = await user.GetDataAsync(grainCancellationToken);
+        var character = new CharacterData(userData.ID, userData.Name, Skin: 1, (x: 0, y: 0));
+        _characters[userData.ID] = character;
+
+        _observers.Subscribe(mapCharacter, mapCharacter);
 
         var data = new SyncCharacterData(SyncCharacterAction.Add, character);
-
 #pragma warning disable CA2012 // Use ValueTasks correctly
         _observers.Notify(o => o.Receive(data));
 #pragma warning restore CA2012 // Use ValueTasks correctly
-
-        _observers.Subscribe(mapCharacter, mapCharacter);
     }
 
     public ValueTask UnsyncCharactersAsync(IMapCharacterObserver mapCharacter)

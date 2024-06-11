@@ -5,7 +5,6 @@ mergeInto(LibraryManager.library, {
     $OverrideFatch__deps: [ '$targetUrlPrefix', '$originalfetch' ],
     $OverrideFatch: function () {
         fetch = function (url, data) {
-            console.log('********** working');
             if (url.indexOf(targetUrlPrefix) === 0) {
                 data.credentials = 'include';
             }
@@ -18,7 +17,6 @@ mergeInto(LibraryManager.library, {
     OverrideFatchCookieRewrite: function (prefix) {
         targetUrlPrefix = UTF8ToString(prefix);
         if (fetch.overridden !== true) {
-            console.log('********** override');
             originalfetch = fetch;
             OverrideFatch();
         }

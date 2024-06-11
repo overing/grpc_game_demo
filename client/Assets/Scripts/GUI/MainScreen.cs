@@ -1,6 +1,9 @@
 using System;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using GameClient;
+using GameCore.Models;
 using Grpc.Core;
 using UnityEngine;
 
@@ -16,6 +19,58 @@ public sealed class MainScreen : MonoBehaviour
     {
         _serverTime = Service.GetRequiredService<ServerTime>();
         _player = Service.GetRequiredService<Player>();
+
+        _ = SyncCharactersAsync(destroyCancellationToken);
+    }
+
+    async ValueTask SyncCharactersAsync(CancellationToken cancellationToken)
+    {
+        Debug.LogWarning("SyncCharactersAsync");
+        var client = Service.GetRequiredService<IGameApiClient>();
+        client.Log += Debug.LogWarning;
+        var stream = client.SyncCharactersAsync();
+        try
+        {
+            await foreach (var data in stream.WithCancellation(cancellationToken))
+            {
+                Debug.LogWarning("SyncCharactersAsync with data");
+                switch (data.Action)
+                {
+                    case SyncCharacterAction.Add:
+                        var prefab = Resources.Load<GameObject>("Prefabs/Character");
+                        var instance = Instantiate(prefab, Vector3.zero, Quaternion.identity);
+                        instance.name = data.Character.ID.ToString("N");
+                        instance.transform.position = new Vector3(data.Character.Position.x, data.Character.Position.y, 0);
+                        break;
+
+                    case SyncCharacterAction.Move:
+                        var moveId = data.Character.ID.ToString("N");
+                        if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == moveId) is CharacterController2D forMove)
+                            forMove.SmoothMoveTo(new Vector2(data.Character.Position.x, data.Character.Position.y));
+                        break;
+
+                    case SyncCharacterAction.Delete:
+                        var deleteId = data.Character.ID.ToString("N");
+                        if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == deleteId) is CharacterController2D forDelete)
+                            Destroy(forDelete.gameObject);
+                        break;
+
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogException(ex);
+            var screen = new GameObject(nameof(FaultScreen)).AddComponent<FaultScreen>();
+            screen.ErrorMessage = "Connection faulted, need login again, will back to title screen.";
+            screen.OkClicked += c =>
+            {
+                new GameObject(nameof(TitleScreen), typeof(TitleScreen));
+                Destroy(c.gameObject);
+            };
+            Destroy(gameObject);
+        }
+        Debug.LogWarning("SyncCharactersAsync end");
     }
 
     void OnGUI()
