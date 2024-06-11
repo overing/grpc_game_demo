@@ -53,7 +53,8 @@ public static class Service
     static void CreateTestScreen()
     {
         var prefab = Resources.Load<GameObject>("Prefabs/Character");
-        UnityEngine.Object.Instantiate(prefab, Vector3.zero, Quaternion.identity);
+        var instance = UnityEngine.Object.Instantiate(prefab, Vector3.zero, Quaternion.identity);
+        instance.AddComponent<MoveToClickPoint>();
     }
 
     public static TService GetService<TService>() => _serviceProvider.GetService<TService>();

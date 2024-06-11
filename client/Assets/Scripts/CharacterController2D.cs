@@ -1,5 +1,9 @@
+using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
 
+[RequireComponent(typeof(Rigidbody2D))]
+[RequireComponent(typeof(Animator))]
 public sealed class CharacterController2D : MonoBehaviour
 {
     [SerializeField]
@@ -10,14 +14,10 @@ public sealed class CharacterController2D : MonoBehaviour
     [Range(0, 5)]
     float _maxSpeed = 2f;
 
-    [SerializeField]
-    Vector2 _targetPos;
-
-    [SerializeField]
-    Vector2 _velocity;
-
     Rigidbody2D _rigidbody;
     Animator _animator;
+    CancellationTokenSource _moveCancellationTokenSource;
+    Vector2 _velocity;
 
     void Start()
     {
@@ -25,32 +25,36 @@ public sealed class CharacterController2D : MonoBehaviour
         _animator = GetComponent<Animator>();
     }
 
-    void LateUpdate()
+    public void SmoothMoveTo(Vector2 targetPosition)
     {
-        if (Input.GetMouseButtonDown(0))
-        {
-            var mousePos = Input.mousePosition;
-            mousePos = new Vector3(mousePos.x, mousePos.y, Camera.main.nearClipPlane);
-            _targetPos = Camera.main.ScreenToWorldPoint(mousePos);
-            var nowPos = (Vector2)gameObject.transform.position;
-            TriggerMoveAnime(_targetPos - nowPos);
-        }
+        if (_moveCancellationTokenSource is { } cts)
+            cts.Cancel();
+        _moveCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
+        _ = MoveToTargetAsync(targetPosition, _moveCancellationTokenSource.Token);
     }
 
-    void FixedUpdate()
+    async ValueTask MoveToTargetAsync(Vector2 targetPosition, CancellationToken cancellationToken = default)
     {
+        if (cancellationToken.IsCancellationRequested)
+            return;
+
         var nowPos = (Vector2)gameObject.transform.position;
-        if (Vector2.Distance(_targetPos, nowPos) > .05f)
+        TriggerMoveAnime(targetPosition - nowPos);
+        while (Vector2.Distance(targetPosition, (Vector2)gameObject.transform.position) > .05f)
         {
-            var smoothVelocity = Vector2.SmoothDamp(_rigidbody.position, _targetPos, ref _velocity, _moveTime, _maxSpeed);
-            _rigidbody.velocity = (smoothVelocity - _rigidbody.position) / Time.fixedDeltaTime;
+            if (cancellationToken.IsCancellationRequested)
+                return;
+
+            var smoothVelocity = Vector2.SmoothDamp(_rigidbody.position, targetPosition, ref _velocity, _moveTime, _maxSpeed);
+            _rigidbody.velocity = (smoothVelocity - _rigidbody.position) / Time.deltaTime;
+            await Task.Yield();
         }
-        else
-        {
-            _rigidbody.velocity = Vector2.zero;
-            gameObject.transform.position = _targetPos;
-            _animator.SetTrigger("idel");
-        }
+        if (cancellationToken.IsCancellationRequested)
+            return;
+
+        _rigidbody.velocity = Vector2.zero;
+        gameObject.transform.position = targetPosition;
+        _animator.SetTrigger("idel");
     }
 
     void TriggerMoveAnime(Vector2 moving)
