@@ -2,21 +2,29 @@ using GameServer.Extensions;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Orleans.Configuration;
 using Orleans.Serialization;
+using OrleansDashboard;
 
 var appBuilder = WebApplication.CreateBuilder(args);
 
 appBuilder.Services.AddGameRepository();
 
-appBuilder.Services.AddOrleans(siloBuilder =>
+var clusterOptionsConfig = appBuilder.Configuration.GetSection(nameof(ClusterOptions));
+if (clusterOptionsConfig.Exists())
 {
-    siloBuilder.Services.Configure<ClusterOptions>(appBuilder.Configuration.GetSection(nameof(ClusterOptions)));
-    siloBuilder.UseRedisClustering(appBuilder.Configuration.GetConnectionString("cache"));
-    siloBuilder.UseDashboard();
-    siloBuilder.Services.AddSerializer(serializerBuilder =>
+    appBuilder.Services.AddOrleans(siloBuilder =>
     {
-        serializerBuilder.AddJsonSerializer(isSupported: type => type.Namespace!.StartsWith("GameCore.Models"));
+        siloBuilder.Services.Configure<ClusterOptions>(clusterOptionsConfig);
+        siloBuilder.Services.AddSerializer(serializerBuilder =>
+        {
+            serializerBuilder.AddJsonSerializer(isSupported: type => type.Namespace!.StartsWith("GameCore.Models"));
+        });
+        siloBuilder.UseRedisClustering(appBuilder.Configuration.GetConnectionString("cache"));
+
+        var dashboardOptionsConfig = clusterOptionsConfig.GetSection(nameof(DashboardOptions));
+        if (dashboardOptionsConfig.Exists())
+            siloBuilder.UseDashboard(dashboardOptionsConfig.Bind);
     });
-});
+}
 
 appBuilder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -26,38 +34,48 @@ appBuilder.Services
     }).Services
     .AddScoped<CustomCookieAuthenticationEvents>();
 
-appBuilder.Services.AddGrpc(options =>
+var grpcConnectionString = appBuilder.Configuration.GetConnectionString("grpc");
+if (grpcConnectionString is not null)
 {
-    options.EnableDetailedErrors = true;
-});
-
-appBuilder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policyBuilder =>
+    appBuilder.Services.AddGrpc(options =>
     {
-        policyBuilder
-            .SetIsOriginAllowed(origin => new Uri(origin).Host == "localhost")
-            .AllowAnyMethod()
-            .AllowCredentials()
-            .AllowAnyHeader()
-            .WithExposedHeaders("grpc-status", "grpc-message");
+        options.EnableDetailedErrors = true;
     });
-});
+
+    appBuilder.Services.AddCors(options =>
+    {
+        options.AddDefaultPolicy(policyBuilder =>
+        {
+            if (new Uri(grpcConnectionString).Host == "localhost")
+                policyBuilder
+                    .SetIsOriginAllowed(origin => new Uri(origin).Host == "localhost");
+
+            policyBuilder
+                .AllowAnyMethod()
+                .AllowCredentials()
+                .AllowAnyHeader()
+                .WithExposedHeaders("grpc-status", "grpc-message");
+        });
+    });
+}
 
 var app = appBuilder.Build();
 
-app.UseCors();
-app.UseWebSockets();
+if (grpcConnectionString is not null)
+{
+    app.UseCors();
+    app.UseWebSockets();
 
-app.UseGrpcWebSocketRequestRoutingEnabler();
+    app.UseGrpcWebSocketRequestRoutingEnabler();
 
-app.UseRouting();
+    app.UseRouting();
 
-app.UseAuthentication();
+    app.UseAuthentication();
 
-app.UseGrpcWebSocketBridge();
+    app.UseGrpcWebSocketBridge();
 
-app.MapGrpcService<GameServer.GrpcServices.GameService>();
-app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
+    app.MapGrpcService<GameServer.GrpcServices.GameService>();
+}
+app.MapGet("/", () => "Is working now ( ^_^;)a");
 
-app.Run("http://localhost:5000");
+app.Run(grpcConnectionString);
