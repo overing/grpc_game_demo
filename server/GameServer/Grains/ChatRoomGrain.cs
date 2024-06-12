@@ -48,6 +48,7 @@ sealed class ChatRoomGrain(
     {
         var user = grainFactory.GetGrain<IUserGrain>(userId);
         var userData = await user.GetDataAsync(grainCancellationToken);
+        _characterNames[userId] = userData.Name;
 
         var exists = _chats.ToList();
 

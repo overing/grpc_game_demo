@@ -46,9 +46,13 @@ if (grpcConnectionString is not null)
     {
         options.AddDefaultPolicy(policyBuilder =>
         {
-            if (new Uri(grpcConnectionString).Host == "localhost")
-                policyBuilder
-                    .SetIsOriginAllowed(origin => new Uri(origin).Host == "localhost");
+            policyBuilder
+                .SetIsOriginAllowed(origin =>
+                {
+                    var host = new Uri(origin).Host;
+                    var result = host == "localhost" || host[..8] is "192.168.";
+                    return result;
+                });
 
             policyBuilder
                 .AllowAnyMethod()
