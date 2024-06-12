@@ -31,14 +31,9 @@ sealed class LobbyGrain(
         else
             await userRepository.UpdateLoginTimeAsync(user.ID, serverTime);
 
-        var userData = new UserData(
-            ID: user.ID,
-            Name: user.Name,
-            Email: user.Email);
-
         var data = new LoginData(
             ServerTime: serverTime,
-            User: userData);
+            User: user);
 
         return data;
     }

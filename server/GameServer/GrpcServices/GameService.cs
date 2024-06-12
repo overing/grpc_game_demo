@@ -39,7 +39,6 @@ public sealed class GameService(
             var sessionId = Guid.NewGuid().ToString("N");
             var claims = new[]
             {
-                new Claim(ClaimTypes.Name, data.User.Name),
                 new Claim("GameUserID", userId),
                 new Claim("SessionID", sessionId),
             };
@@ -49,6 +48,7 @@ public sealed class GameService(
                 principal: new ClaimsPrincipal(claimsIdentity),
                 properties: new AuthenticationProperties());
             await sessionRepository.SetSessionAsync(userId, sessionId);
+            context.UserState["GameUserID"] = userId;
 
             var response = new LoginResponse
             {
@@ -97,59 +97,37 @@ public sealed class GameService(
         }
     }
 
-    public override async Task SyncCharacters(SyncCharactersRequest request, IServerStreamWriter<SyncCharactersResponse> responseStream, ServerCallContext context)
+    public override async Task SyncCharacters(
+        IAsyncStreamReader<SyncCharactersRequest> requestStream,
+        IServerStreamWriter<SyncCharactersResponse> responseStream,
+        ServerCallContext context)
     {
         _logger.LogInformation("SyncCharacters");
-
-        var identity = context.GetHttpContext().User.Identity;
-        if (identity is not ClaimsIdentity id ||
-            id.Claims.FirstOrDefault(c => c.Type == "GameUserID") is not Claim claim ||
-            claim.Value is not string userId)
-        {
-            context.Status = new Status(StatusCode.Unauthenticated, "Need login.");
-            return;
-        }
 
         using var cts = new GrainCancellationTokenSource();
         using (context.CancellationToken.Register(static state => ((GrainCancellationTokenSource)state!).Cancel().Ignore(), cts))
         {
-            var observer = new MapCharacterObserver();
+            var logger = context.GetHttpContext().RequestServices.GetRequiredService<ILogger<MapCharacterObserver>>();
+            var observer = new MapCharacterObserver(logger, responseStream, context.CancellationToken);
             var observerReference = _clusterClient.CreateObjectReference<IMapCharacterObserver>(observer);
-
-            var user = _clusterClient.GetGrain<IUserGrain>(userId);
-            var userData = await user.GetDataAsync(cts.Token);
-
-            var map = _clusterClient.GetGrain<IMapGrain>(request.MapCode);
-            await map.SyncCharactersAsync(userId, observerReference, cts.Token);
 
             try
             {
-                await foreach (var data in observer.WithCancellation(context.CancellationToken))
+                var map = _clusterClient.GetGrain<IMapGrain>(1);
+                await foreach (var data in requestStream.ReadAllAsync(context.CancellationToken))
                 {
-                    var characterData = data.Character;
-                    var item = new SyncCharactersResponse
-                    {
-                        Action = (int)data.Action,
-                        Character = new Character
-                        {
-                            ID = characterData.ID.ToString("N"),
-                            Name = characterData.Name,
-                            Skin = characterData.Skin,
-                            Position = new Vector2
-                            {
-                                X = characterData.Position.x,
-                                Y = characterData.Position.y,
-                            },
-                        },
-                    };
-                    await responseStream.WriteAsync(item, context.CancellationToken);
+                    var userId = data.ID;
+                    var user = _clusterClient.GetGrain<IUserGrain>(data.ID);
+
+                    await map.SyncCharactersAsync(userId, observerReference, cts.Token);
+                    await user.SetMapCodeAsync(1, cts.Token);
+                    _logger.LogInformation("UserId#{userId} join to map", userId);
                 }
+                await map.UnsyncCharactersAsync(observerReference);
             }
             catch (OperationCanceledException)
             {
             }
-
-            await map.UnsyncCharactersAsync(observerReference);
         }
     }
 
@@ -184,8 +162,8 @@ public sealed class GameService(
                     Skin = characterData.Skin,
                     Position = new Vector2
                     {
-                        X = characterData.Position.x,
-                        Y = characterData.Position.y,
+                        X = characterData.Position.X,
+                        Y = characterData.Position.Y,
                     },
                 },
             };

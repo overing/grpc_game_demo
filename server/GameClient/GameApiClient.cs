@@ -13,10 +13,9 @@ public interface IGameApiClient
 {
     ValueTask<LoginData> LoginAsync(string account, CancellationToken cancellationToken = default);
     ValueTask<EchoData> EchoAsync(DateTimeOffset clientTime, CancellationToken cancellationToken = default);
-    IAsyncEnumerable<SyncCharacterData> SyncCharactersAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<SyncCharacterData> SyncCharactersAsync(Guid userId, CancellationToken cancellationToken = default);
     ValueTask<CharacterData> MoveAsync(float x, float y, CancellationToken cancellationToken = default);
     ValueTask LogoutAsync(CancellationToken cancellationToken = default);
-    event Action<string> Log;
 }
 
 sealed class GameApiClient : IGameApiClient, IDisposable
@@ -25,8 +24,6 @@ sealed class GameApiClient : IGameApiClient, IDisposable
     ChannelBase? _channel;
     readonly bool _disposeChannel;
     readonly GameService.GameServiceClient _client;
-
-    public event Action<string>? Log;
 
     public GameApiClient(ChannelBase channel, bool disposeChannel)
     {
@@ -88,31 +85,27 @@ sealed class GameApiClient : IGameApiClient, IDisposable
         return data;
     }
 
-    public async IAsyncEnumerable<SyncCharacterData> SyncCharactersAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<SyncCharacterData> SyncCharactersAsync(Guid userId, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var request = new SyncCharactersRequest { MapCode = 1 };
+        var request = new SyncCharactersRequest { ID = userId.ToString("N") };
 
-        Log?.Invoke("SyncCharactersAsync 1");
-        using var call = _client.SyncCharacters(request, cancellationToken: cancellationToken);
-        Log?.Invoke("SyncCharactersAsync 2");
-        while (await call.ResponseStream.MoveNext())
+        using var duplex = _client.SyncCharacters(cancellationToken: cancellationToken);
+        await duplex.RequestStream.WriteAsync(request);
+        await foreach (var response in duplex.ResponseStream.ReadAllAsync(cancellationToken))
         {
-            Log?.Invoke("SyncCharactersAsync 3");
-            var item = call.ResponseStream.Current;
-            var character = item.Character;
+            var character = response.Character;
 
             var characterData = new CharacterData(
                 ID: Guid.Parse(character.ID),
                 Name: character.Name,
                 Skin: character.Skin,
-                Position: (character.Position.X, character.Position.Y));
+                Position: new(character.Position.X, character.Position.Y));
             var data = new SyncCharacterData(
-                Action: (SyncCharacterAction)item.Action,
+                Action: (SyncCharacterAction)response.Action,
                 Character: characterData);
 
             yield return data;
         }
-        Log?.Invoke("SyncCharactersAsync 4");
     }
 
     public async ValueTask<CharacterData> MoveAsync(float x, float y, CancellationToken cancellationToken = default)
@@ -127,7 +120,7 @@ sealed class GameApiClient : IGameApiClient, IDisposable
                 ID: Guid.Parse(character.ID),
                 Name: character.Name,
                 Skin: character.Skin,
-                Position: (character.Position.X, character.Position.Y));
+                Position: new(character.Position.X, character.Position.Y));
 
         return data;
     }

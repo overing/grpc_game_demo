@@ -11,7 +11,7 @@ package game_service;
 service GameService {
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc Echo(EchoRequest) returns (EchoResponse);
-  rpc SyncCharacters(SyncCharactersRequest) returns (stream SyncCharactersResponse);
+  rpc SyncCharacters(stream SyncCharactersRequest) returns (stream SyncCharactersResponse);
   rpc Move(MoveRequest) returns (MoveResponse);
   rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
@@ -60,7 +60,7 @@ message EchoResponse {
 }
 
 message SyncCharactersRequest {
-  int32 MapCode = 1;
+  string ID = 1;
 }
 
 message SyncCharactersResponse {

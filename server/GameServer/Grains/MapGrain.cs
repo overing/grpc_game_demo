@@ -29,10 +29,20 @@ sealed class MapGrain(
     {
         var user = grainFactory.GetGrain<IUserGrain>(userId);
         var userData = await user.GetDataAsync(grainCancellationToken);
-        var character = new CharacterData(userData.ID, userData.Name, Skin: 1, (x: 0, y: 0));
+        var character = new CharacterData(userData.ID, userData.Name, Skin: 1, new(X: 0, Y: 0));
+
+        var exists = _characters.Values.ToList();
         _characters[userData.ID] = character;
 
         _observers.Subscribe(mapCharacter, mapCharacter);
+
+        foreach (var exist in exists)
+        {
+            var existData = new SyncCharacterData(SyncCharacterAction.Add, exist);
+#pragma warning disable CA2012 // Use ValueTasks correctly
+            _observers.Notify(o => o.Receive(existData), o => o == mapCharacter);
+#pragma warning restore CA2012 // Use ValueTasks correctly
+        }
 
         var data = new SyncCharacterData(SyncCharacterAction.Add, character);
 #pragma warning disable CA2012 // Use ValueTasks correctly
@@ -51,13 +61,10 @@ sealed class MapGrain(
         if (!_characters.TryGetValue(userId, out var data))
             throw new ArgumentException($"Character#{userId:N} not found", nameof(userId));
 
-        data = data with
-        {
-            Position = (x, y),
-        };
-        _characters[userId] = data;
+        var newData = data with { Position = new(x, y) };
+        _characters[userId] = newData;
 
-        var sync = new SyncCharacterData(SyncCharacterAction.Add, data);
+        var sync = new SyncCharacterData(SyncCharacterAction.Move, newData);
 
 #pragma warning disable CA2012 // Use ValueTasks correctly
         _observers.Notify(o => o.Receive(sync));

@@ -1,5 +1,5 @@
+using System.Collections;
 using System.Threading;
-using System.Threading.Tasks;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D))]
@@ -16,7 +16,7 @@ public sealed class CharacterController2D : MonoBehaviour
 
     Rigidbody2D _rigidbody;
     Animator _animator;
-    CancellationTokenSource _moveCancellationTokenSource;
+    Coroutine _moveCodoutine;
     Vector2 _velocity;
 
     void Start()
@@ -27,30 +27,21 @@ public sealed class CharacterController2D : MonoBehaviour
 
     public void SmoothMoveTo(Vector2 targetPosition)
     {
-        if (_moveCancellationTokenSource is { } cts)
-            cts.Cancel();
-        _moveCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
-        _ = MoveToTargetAsync(targetPosition, _moveCancellationTokenSource.Token);
+        if (_moveCodoutine is { } exists)
+            StopCoroutine(exists);
+        _moveCodoutine = StartCoroutine(MoveToTargetAsync(targetPosition));
     }
 
-    async ValueTask MoveToTargetAsync(Vector2 targetPosition, CancellationToken cancellationToken = default)
+    IEnumerator MoveToTargetAsync(Vector2 targetPosition)
     {
-        if (cancellationToken.IsCancellationRequested)
-            return;
-
         var nowPos = (Vector2)gameObject.transform.position;
         TriggerMoveAnime(targetPosition - nowPos);
         while (Vector2.Distance(targetPosition, (Vector2)gameObject.transform.position) > .05f)
         {
-            if (cancellationToken.IsCancellationRequested)
-                return;
-
             var smoothVelocity = Vector2.SmoothDamp(_rigidbody.position, targetPosition, ref _velocity, _moveTime, _maxSpeed);
-            _rigidbody.velocity = (smoothVelocity - _rigidbody.position) / Time.deltaTime;
-            await Task.Yield();
+            _rigidbody.velocity = (smoothVelocity - _rigidbody.position) / Time.fixedDeltaTime;
+            yield return new WaitForFixedUpdate();
         }
-        if (cancellationToken.IsCancellationRequested)
-            return;
 
         _rigidbody.velocity = Vector2.zero;
         gameObject.transform.position = targetPosition;
