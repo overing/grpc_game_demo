@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,27 +10,55 @@ using UnityEngine;
 
 public sealed class MainScreen : MonoBehaviour
 {
+    IGameApiClient _client;
     ServerTime _serverTime;
     Player _player;
 
     Task _task;
-    string _echoResult;
-    bool _hiddenJoin;
+
+    readonly Queue<ChatData> _chats = new();
+    Vector2 _messageScrollPosition;
+    string _input;
 
     void Start()
     {
+        _client = Service.GetRequiredService<IGameApiClient>();
         _serverTime = Service.GetRequiredService<ServerTime>();
         _player = Service.GetRequiredService<Player>();
+
+        _ = SyncCharactersAsync(destroyCancellationToken);
+        _ = SyncChstAsync(destroyCancellationToken);
+    }
+
+    async ValueTask SyncChstAsync(CancellationToken cancellationToken)
+    {
+        var stream = _client.SyncChatAsync(_player.ID, cancellationToken);
+        try
+        {
+            await foreach (var data in stream.WithCancellation(cancellationToken))
+                _chats.Enqueue(data);
+        }
+        catch (Exception ex)
+        {
+            if (cancellationToken.IsCancellationRequested)
+                return;
+            Debug.LogException(ex);
+            var screen = new GameObject(nameof(FaultScreen)).AddComponent<FaultScreen>();
+            screen.ErrorMessage = "Connection faulted, need login again, will back to title screen.";
+            screen.OkClicked += c =>
+            {
+                new GameObject(nameof(TitleScreen), typeof(TitleScreen));
+                Destroy(c.gameObject);
+            };
+            Destroy(gameObject);
+        }
     }
 
     async ValueTask SyncCharactersAsync(CancellationToken cancellationToken)
     {
-        var player = Service.GetRequiredService<Player>();
-        var client = Service.GetRequiredService<IGameApiClient>();
-        var stream = client.SyncCharactersAsync(player.ID, cancellationToken);
+        var stream = _client.SyncCharactersAsync(_player.ID, cancellationToken);
         try
         {
-            _hiddenJoin = true;
             await foreach (var data in stream.WithCancellation(cancellationToken))
             {
                 switch (data.Action)
@@ -40,7 +69,7 @@ public sealed class MainScreen : MonoBehaviour
                             Destroy(forExists.gameObject);
                         var prefab = Resources.Load<GameObject>("Prefabs/Character");
                         var instance = Instantiate(prefab, Vector3.zero, Quaternion.identity, transform);
-                        if (data.Character.ID == player.ID)
+                        if (data.Character.ID == _player.ID)
                             instance.AddComponent<SendMoveToClickPoint>();
                         instance.name = addId;
                         instance.transform.position = new Vector2(data.Character.Position.X, data.Character.Position.Y);
@@ -61,7 +90,6 @@ public sealed class MainScreen : MonoBehaviour
                         else
                             Debug.LogWarningFormat("Delete id#{0} not found", deleteId);
                         break;
-
                 }
             }
         }
@@ -79,14 +107,12 @@ public sealed class MainScreen : MonoBehaviour
             };
             Destroy(gameObject);
         }
-        Debug.LogWarning("SyncCharactersAsync end");
     }
 
     void OnGUI()
     {
-        bool clickEcho;
-        bool clickJoin = false;
         bool clickLogout;
+        bool clickSend;
         using (new GUILayout.VerticalScope(GUI.skin.box, GUILayout.Width(Screen.width), GUILayout.Height(Screen.height)))
         {
             using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
@@ -98,46 +124,71 @@ public sealed class MainScreen : MonoBehaviour
             {
                 GUILayout.Label("Name:", GUILayout.Width(GUI.skin.label.fontSize * 5));
                 GUILayout.TextField(_player.Name, GUILayout.ExpandWidth(true));
+                clickLogout = GUILayout.Button("LOGOUT", GUILayout.ExpandWidth(false));
+            }
+
+            GUILayout.FlexibleSpace();
+
+            using (var scroll = new GUILayout.ScrollViewScope(_messageScrollPosition, GUI.skin.box, GUILayout.ExpandWidth(true)))
+            {
+                _messageScrollPosition = scroll.scrollPosition;
+                foreach (var chat in _chats)
+                {
+                    using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
+                    {
+                        GUILayout.Label(chat.Sender, GUILayout.ExpandWidth(false));
+                        GUILayout.Label(chat.Message, GUILayout.ExpandWidth(true));
+                    }
+                }
             }
 
             using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
             {
                 GUI.enabled = _task is null;
-                clickEcho = GUILayout.Button("ECHO", GUILayout.ExpandWidth(false));
-                if (!_hiddenJoin)
-                    clickJoin = GUILayout.Button("JOIN", GUILayout.ExpandWidth(false));
-                clickLogout = GUILayout.Button("LOGOUT", GUILayout.ExpandWidth(false));
+                _input = GUILayout.TextField(_input, GUILayout.ExpandWidth(true));
+                clickSend = GUILayout.Button("SEND", GUILayout.ExpandWidth(false));
                 GUI.enabled = true;
             }
-
-            if (_echoResult is { } result)
-            {
-                using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
-                {
-                    GUILayout.Label("Result:", GUILayout.ExpandWidth(false));
-                    GUILayout.TextArea(result, GUILayout.ExpandWidth(true));
-                }
-            }
         }
-        if (clickEcho)
-            _ = EchoAsync();
-        if (clickJoin)
-            _ = SyncCharactersAsync(destroyCancellationToken);
         if (clickLogout)
             _ = LogoutAsync();
+        if (clickSend)
+            HandleSend();
+    }
+
+    void EnqueueSystemMessage(string message, string sender = "<system>")
+    {
+        _chats.Enqueue(new(sender, message));
+        while (_chats.Count > 64)
+            _chats.Dequeue();
+        _messageScrollPosition.y = float.MaxValue;
+    }
+
+    void HandleSend()
+    {
+        if (string.IsNullOrWhiteSpace(_input))
+            return;
+
+        if (_input.Equals("/echo", StringComparison.InvariantCultureIgnoreCase))
+        {
+            _ = EchoAsync();
+            _input = string.Empty;
+            return;
+        }
+
+        _client.ChatAsync(_input);
+        _input = string.Empty;
     }
 
     async ValueTask EchoAsync()
     {
         try
         {
-            _echoResult = null;
-            var client = Service.GetRequiredService<IGameApiClient>();
-            var task = client.EchoAsync(DateTimeOffset.Now, destroyCancellationToken).AsTask();
+            var task = _client.EchoAsync(DateTimeOffset.Now, destroyCancellationToken).AsTask();
             _task = task;
             var data = await task;
 
-            _echoResult = data.ToString();
+            EnqueueSystemMessage(data.ToString());
             _task = null;
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Unauthenticated)
@@ -157,7 +208,7 @@ public sealed class MainScreen : MonoBehaviour
         }
         catch (Exception ex)
         {
-            _echoResult = "Error: " + ex.ToString();
+            EnqueueSystemMessage("Error: " + ex.ToString());
             Debug.LogException(ex);
             _task = null;
         }
@@ -167,8 +218,7 @@ public sealed class MainScreen : MonoBehaviour
     {
         try
         {
-            var client = Service.GetRequiredService<IGameApiClient>();
-            _task = client.LogoutAsync(destroyCancellationToken).AsTask();
+            _task = _client.LogoutAsync(destroyCancellationToken).AsTask();
             await _task;
 
             _task = null;
@@ -182,7 +232,7 @@ public sealed class MainScreen : MonoBehaviour
         }
         catch (Exception ex)
         {
-            _echoResult = "Error: " + ex.ToString();
+            EnqueueSystemMessage("Error: " + ex.ToString());
             Debug.LogException(ex);
             _task = null;
         }

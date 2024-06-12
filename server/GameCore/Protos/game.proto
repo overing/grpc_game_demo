@@ -12,7 +12,9 @@ service GameService {
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc Echo(EchoRequest) returns (EchoResponse);
   rpc SyncCharacters(stream SyncCharactersRequest) returns (stream SyncCharactersResponse);
+  rpc SyncChat(stream SyncChatRequest) returns (stream SyncChatResponse);
   rpc Move(MoveRequest) returns (MoveResponse);
+  rpc Chat(ChatRequest) returns (ChatResponse);
   rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
@@ -75,3 +77,18 @@ message MoveRequest {
 message MoveResponse {
   Character Character = 1;
 }
+
+message SyncChatRequest {
+  string ID = 1;
+}
+
+message SyncChatResponse {
+  string Sender = 1;
+  string Message = 2;
+}
+
+message ChatRequest {
+  string Message = 1;
+}
+
+message ChatResponse { }

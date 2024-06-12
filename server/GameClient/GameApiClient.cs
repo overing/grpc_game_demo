@@ -14,7 +14,9 @@ public interface IGameApiClient
     ValueTask<LoginData> LoginAsync(string account, CancellationToken cancellationToken = default);
     ValueTask<EchoData> EchoAsync(DateTimeOffset clientTime, CancellationToken cancellationToken = default);
     IAsyncEnumerable<SyncCharacterData> SyncCharactersAsync(Guid userId, CancellationToken cancellationToken = default);
-    ValueTask<CharacterData> MoveAsync(float x, float y, CancellationToken cancellationToken = default);
+    ValueTask MoveAsync(float x, float y, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<ChatData> SyncChatAsync(Guid userId, CancellationToken cancellationToken = default);
+    ValueTask ChatAsync(string message, CancellationToken cancellationToken = default);
     ValueTask LogoutAsync(CancellationToken cancellationToken = default);
 }
 
@@ -108,21 +110,34 @@ sealed class GameApiClient : IGameApiClient, IDisposable
         }
     }
 
-    public async ValueTask<CharacterData> MoveAsync(float x, float y, CancellationToken cancellationToken = default)
+    public async ValueTask MoveAsync(float x, float y, CancellationToken cancellationToken = default)
     {
         var request = new MoveRequest { Position = new Vector2 { X = x, Y = y } };
 
-        var response = await _client.MoveAsync(request, cancellationToken: cancellationToken);
+        await _client.MoveAsync(request, cancellationToken: cancellationToken);
+    }
 
-        var character = response.Character;
+    public async IAsyncEnumerable<ChatData> SyncChatAsync(Guid userId, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var request = new SyncChatRequest { ID = userId.ToString("N") };
 
-        var data = new CharacterData(
-                ID: Guid.Parse(character.ID),
-                Name: character.Name,
-                Skin: character.Skin,
-                Position: new(character.Position.X, character.Position.Y));
+        using var duplex = _client.SyncChat(cancellationToken: cancellationToken);
+        await duplex.RequestStream.WriteAsync(request);
+        await foreach (var response in duplex.ResponseStream.ReadAllAsync(cancellationToken))
+        {
+            var data = new ChatData(
+                Sender: response.Sender,
+                Message: response.Message);
 
-        return data;
+            yield return data;
+        }
+    }
+
+    public async ValueTask ChatAsync(string message, CancellationToken cancellationToken = default)
+    {
+        var request = new ChatRequest { Message = message };
+
+        await _client.ChatAsync(request, cancellationToken: cancellationToken);
     }
 
     public async ValueTask LogoutAsync(CancellationToken cancellationToken = default)
