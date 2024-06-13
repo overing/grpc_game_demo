@@ -23,20 +23,31 @@ public sealed partial class GameService
             var observerReference = _clusterClient.CreateObjectReference<IMapCharacterObserver>(observer);
             var map = _clusterClient.GetGrain<IMapGrain>(MapID);
 
+            Guid? userId = null;
             try
             {
+                bool joined = false;
                 await foreach (var data in requestStream.ReadAllAsync(context.CancellationToken))
                 {
-                    var userId = Guid.Parse(data.ID);
-                    var user = _clusterClient.GetGrain<IUserGrain>(userId);
+                    _logger.LogInformation(nameof(data));
+                    var id = Guid.Parse(data.ID);
+                    userId = id;
+                    var user = _clusterClient.GetGrain<IUserGrain>(id);
 
-                    await map.SubscribeCharacterAsync(userId, observerReference, cts.Token);
-                    _logger.LogInformation("UserId#{userId} join to map", userId);
+                    await map.SubscribeCharacterAsync(observerReference);
+                    if (joined)
+                        continue;
+
+                    await map.JoinAsync(id, cts.Token);
+                    joined = true;
+                    _logger.LogInformation("UserId#{userId} join to map", id);
                 }
-                await map.UnsubscribeCharacterAsync(observerReference);
             }
             catch (OperationCanceledException)
             {
+                if (userId is Guid id)
+                    await map.LeaveAsync(id, cts.Token);
+                await map.UnsubscribeCharacterAsync(observerReference);
             }
         }
     }

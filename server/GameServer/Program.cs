@@ -1,3 +1,4 @@
+using GameServer;
 using GameServer.Extensions;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Orleans.Configuration;
@@ -42,32 +43,32 @@ if (grpcConnectionString is not null)
         options.EnableDetailedErrors = true;
     });
 
-    appBuilder.Services.AddCors(options =>
-    {
-        options.AddDefaultPolicy(policyBuilder =>
-        {
-            policyBuilder
-                .SetIsOriginAllowed(origin =>
-                {
-                    var host = new Uri(origin).Host;
-                    var result = host == "localhost" || host[..8] is "192.168.";
-                    return result;
-                });
+    // appBuilder.Services.AddCors(options =>
+    // {
+    //     options.AddDefaultPolicy(policyBuilder =>
+    //     {
+    //         policyBuilder
+    //             .SetIsOriginAllowed(origin =>
+    //             {
+    //                 var host = new Uri(origin).Host;
+    //                 var result = host == "localhost" || host[..8] is "192.168.";
+    //                 return result;
+    //             });
 
-            policyBuilder
-                .AllowAnyMethod()
-                .AllowCredentials()
-                .AllowAnyHeader()
-                .WithExposedHeaders("grpc-status", "grpc-message");
-        });
-    });
+    //         policyBuilder
+    //             .AllowAnyMethod()
+    //             .AllowCredentials()
+    //             .AllowAnyHeader()
+    //             .WithExposedHeaders("grpc-status", "grpc-message");
+    //     });
+    // });
 }
 
 var app = appBuilder.Build();
 
 if (grpcConnectionString is not null)
 {
-    app.UseCors();
+    // app.UseCors();
     app.UseWebSockets();
 
     app.UseGrpcWebSocketRequestRoutingEnabler();
@@ -80,6 +81,7 @@ if (grpcConnectionString is not null)
 
     app.MapGrpcService<GameServer.GrpcServices.GameService>();
 }
+app.UseUnityWebGLClientStaticFile();
 app.MapGet("/", () => "Is working now ( ^_^;)a");
 
 app.Run(grpcConnectionString);

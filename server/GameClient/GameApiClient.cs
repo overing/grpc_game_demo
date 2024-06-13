@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -92,7 +93,7 @@ sealed class GameApiClient : IGameApiClient, IDisposable
         var request = new SyncCharactersRequest { ID = userId.ToString("N") };
 
         using var duplex = _client.SyncCharacters(cancellationToken: cancellationToken);
-        await duplex.RequestStream.WriteAsync(request);
+        _ = ResendAsync(duplex, request, cancellationToken);
         await foreach (var response in duplex.ResponseStream.ReadAllAsync(cancellationToken))
         {
             var character = response.Character;
@@ -107,6 +108,19 @@ sealed class GameApiClient : IGameApiClient, IDisposable
                 Character: characterData);
 
             yield return data;
+        }
+
+        static async ValueTask ResendAsync(AsyncDuplexStreamingCall<SyncCharactersRequest, SyncCharactersResponse> duplex, SyncCharactersRequest request, CancellationToken cancellationToken)
+        {
+            var sw = new Stopwatch();
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await duplex.RequestStream.WriteAsync(request);
+
+                sw.Restart();
+                while (sw.Elapsed.TotalMinutes < 1 && !cancellationToken.IsCancellationRequested)
+                    await Task.Yield();
+            }
         }
     }
 

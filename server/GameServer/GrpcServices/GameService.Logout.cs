@@ -26,7 +26,6 @@ public sealed partial class GameService
         using (context.CancellationToken.Register(static state => ((GrainCancellationTokenSource)state!).Cancel().Ignore(), cts))
         {
             var map = _clusterClient.GetGrain<IMapGrain>(MapID);
-            await map.LeaveAsync(Guid.Parse(userId), cts.Token);
 
             await _sessionRepository.RemoveSessionAsync(userId);
 

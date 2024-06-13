@@ -9,10 +9,13 @@ namespace GameServer.Grains;
 public interface IMapGrain : IGrainWithIntegerKey
 {
     [Alias("SubscribeCharacterAsync")]
-    ValueTask SubscribeCharacterAsync(Guid userId, IMapCharacterObserver mapCharacter, GrainCancellationToken grainCancellationToken);
+    ValueTask SubscribeCharacterAsync(IMapCharacterObserver mapCharacter);
 
     [Alias("UnsubscribeCharacterAsync")]
     ValueTask UnsubscribeCharacterAsync(IMapCharacterObserver mapCharacter);
+
+    [Alias("JoinAsync")]
+    ValueTask JoinAsync(Guid userId, GrainCancellationToken grainCancellationToken);
 
     [Alias("MoveAsync")]
     ValueTask<CharacterData> MoveAsync(Guid userId, float x, float y, GrainCancellationToken grainCancellationToken);
@@ -34,32 +37,33 @@ sealed class MapGrain(
 
     readonly ObserverManager<IMapChatObserver> _chatObservers = new(TimeSpan.FromMinutes(3), logger);
 
-    public async ValueTask SubscribeCharacterAsync(Guid userId, IMapCharacterObserver mapCharacter, GrainCancellationToken grainCancellationToken)
+    public ValueTask SubscribeCharacterAsync(IMapCharacterObserver mapCharacter)
     {
-        var user = grainFactory.GetGrain<IUserGrain>(userId);
-        var userData = await user.GetDataAsync(grainCancellationToken);
-        var newCharacterData = new CharacterData(userData.ID, userData.Name, Skin: 1, new(X: 0, Y: 0));
-
-        var existsCharacterDatas = _characters.Values.ToList();
-        _characters[userData.ID] = newCharacterData;
-
+        logger.LogInformation(nameof(SubscribeCharacterAsync));
         _characterObservers.Subscribe(mapCharacter, mapCharacter);
-
-        foreach (var characterDatas in existsCharacterDatas)
-        {
-            var existData = new SyncCharacterData(SyncCharacterAction.Add, characterDatas);
-            _characterObservers.NotifyIgnoreWarning(o => o.Receive(existData), o => o == mapCharacter);
-        }
-
-        var data = new SyncCharacterData(SyncCharacterAction.Add, newCharacterData);
-
-        _characterObservers.NotifyIgnoreWarning(o => o.Receive(data));
+        return ValueTask.CompletedTask;
     }
 
     public ValueTask UnsubscribeCharacterAsync(IMapCharacterObserver mapCharacter)
     {
         _characterObservers.Unsubscribe(mapCharacter);
         return ValueTask.CompletedTask;
+    }
+
+    public async ValueTask JoinAsync(Guid userId, GrainCancellationToken grainCancellationToken)
+    {
+        if (!_characters.ContainsKey(userId))
+        {
+            var user = grainFactory.GetGrain<IUserGrain>(userId);
+            var userData = await user.GetDataAsync(grainCancellationToken);
+            _characters[userId] = new CharacterData(userId, userData.Name, Skin: 1, new(X: 0, Y: 0));
+        }
+
+        foreach (var characterDatas in _characters.Values)
+        {
+            var existData = new SyncCharacterData(SyncCharacterAction.Add, characterDatas);
+            _characterObservers.NotifyIgnoreWarning(o => o.Receive(existData));
+        }
     }
 
     public ValueTask<CharacterData> MoveAsync(Guid userId, float x, float y, GrainCancellationToken grainCancellationToken)
@@ -77,16 +81,19 @@ sealed class MapGrain(
         return ValueTask.FromResult(chatacterData);
     }
 
-    public ValueTask LeaveAsync(Guid userId, GrainCancellationToken grainCancellationToken)
+    public async ValueTask LeaveAsync(Guid userId, GrainCancellationToken grainCancellationToken)
     {
         if (!_characters.TryGetValue(userId, out var characterData))
-            throw new ArgumentException($"Character#{userId:N} not found", nameof(userId));
+        {
+            var user = grainFactory.GetGrain<IUserGrain>(userId);
+            var userData = await user.GetDataAsync(grainCancellationToken);
+            characterData = new CharacterData(userId, userData.Name, Skin: 1, new(X: 0, Y: 0));
+        }
+        else
+            _characters.Remove(userId);
 
         var data = new SyncCharacterData(SyncCharacterAction.Delete, characterData);
-
         _characterObservers.NotifyIgnoreWarning(o => o.Receive(data));
-
-        return ValueTask.CompletedTask;
     }
 }
 
