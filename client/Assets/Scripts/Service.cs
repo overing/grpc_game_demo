@@ -9,6 +9,13 @@ public static class Service
     static readonly string ServerAddress = "http://localhost:5000";
     static IServiceProvider _serviceProvider;
 
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
+    public static void InitUniTaskLoop()
+    {
+        var loop = UnityEngine.LowLevel.PlayerLoop.GetCurrentPlayerLoop();
+        Cysharp.Threading.Tasks.PlayerLoopHelper.Initialize(ref loop);
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void InitializeSynchronizationContext()
     {

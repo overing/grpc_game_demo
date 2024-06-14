@@ -19,6 +19,9 @@ public interface IGameApiClient
     IAsyncEnumerable<ChatData> SyncChatAsync(Guid userId, CancellationToken cancellationToken = default);
     ValueTask ChatAsync(string message, CancellationToken cancellationToken = default);
     ValueTask LogoutAsync(CancellationToken cancellationToken = default);
+
+    event Action<string> Log;
+    GameService.GameServiceClient Client { get; }
 }
 
 sealed class GameApiClient : IGameApiClient, IDisposable
@@ -27,6 +30,9 @@ sealed class GameApiClient : IGameApiClient, IDisposable
     ChannelBase? _channel;
     readonly bool _disposeChannel;
     readonly GameService.GameServiceClient _client;
+
+    public event Action<string>? Log;
+    public GameService.GameServiceClient Client => _client;
 
     public GameApiClient(ChannelBase channel, bool disposeChannel)
     {
@@ -93,7 +99,8 @@ sealed class GameApiClient : IGameApiClient, IDisposable
         var request = new SyncCharactersRequest { ID = userId.ToString("N") };
 
         using var duplex = _client.SyncCharacters(cancellationToken: cancellationToken);
-        _ = ResendAsync(duplex, request, cancellationToken);
+        Log?.Invoke($"T#{Environment.CurrentManagedThreadId} SyncCharactersAsync");
+        _ = ResendAsync(TimeSpan.FromSeconds(10), duplex, request, cancellationToken);
         await foreach (var response in duplex.ResponseStream.ReadAllAsync(cancellationToken))
         {
             var character = response.Character;
@@ -110,16 +117,35 @@ sealed class GameApiClient : IGameApiClient, IDisposable
             yield return data;
         }
 
-        static async ValueTask ResendAsync(AsyncDuplexStreamingCall<SyncCharactersRequest, SyncCharactersResponse> duplex, SyncCharactersRequest request, CancellationToken cancellationToken)
+        async ValueTask ResendAsync(
+            TimeSpan inteval,
+            AsyncDuplexStreamingCall<SyncCharactersRequest,
+            SyncCharactersResponse> duplex,
+            SyncCharactersRequest request,
+            CancellationToken cancellationToken)
         {
             var sw = new Stopwatch();
             while (!cancellationToken.IsCancellationRequested)
             {
+                Log?.Invoke($"T#{Environment.CurrentManagedThreadId} Before WriteAsync");
                 await duplex.RequestStream.WriteAsync(request);
+                Log?.Invoke($"T#{Environment.CurrentManagedThreadId} After WriteAsync");
 
                 sw.Restart();
-                while (sw.Elapsed.TotalMinutes < 1 && !cancellationToken.IsCancellationRequested)
+                Log?.Invoke($"T#{Environment.CurrentManagedThreadId} After Restart");
+                uint i = 0;
+                while (sw.Elapsed < inteval && !cancellationToken.IsCancellationRequested)
+                {
+                    if (++i > 300)
+                    {
+                        Log?.Invoke(new{sw.Elapsed}.ToString());
+                        i = 0;
+                    }
+                    Log?.Invoke($"T#{Environment.CurrentManagedThreadId} Before Yield");
                     await Task.Yield();
+                    Log?.Invoke($"T#{Environment.CurrentManagedThreadId} After Yield");
+                }
+                Log?.Invoke($"T#{Environment.CurrentManagedThreadId} After While");
             }
         }
     }
