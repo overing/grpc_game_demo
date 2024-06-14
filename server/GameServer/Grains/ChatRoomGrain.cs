@@ -8,11 +8,14 @@ namespace GameServer.Grains;
 [Alias("GameServer.Grains.IChatRoomGrain")]
 public interface IChatRoomGrain : IGrainWithIntegerKey
 {
-    [Alias("SubscribeChatAsync")]
-    ValueTask SubscribeChatAsync(Guid userId, IMapChatObserver mapCharacter, GrainCancellationToken grainCancellationToken);
+    [Alias("SubscribeAsync")]
+    ValueTask SubscribeAsync(IMapChatObserver mapChat);
 
-    [Alias("UnsubscribeChatAsync")]
-    ValueTask UnsubscribeChatAsync(IMapChatObserver mapCharacter);
+    [Alias("UnsubscribeAsync")]
+    ValueTask UnsubscribeAsync(IMapChatObserver mapChat);
+
+    [Alias("JoinAsync")]
+    ValueTask JoinAsync(Guid userId, GrainCancellationToken grainCancellationToken);
 
     [Alias("ChatAsync")]
     ValueTask<ChatData> ChatAsync(Guid userId, string message, GrainCancellationToken grainCancellationToken);
@@ -32,36 +35,30 @@ sealed class ChatRoomGrain(
 
     readonly ObserverManager<IMapChatObserver> _chatObservers = new(TimeSpan.FromMinutes(3), logger);
 
-    public ValueTask LeaveAsync(Guid userId, GrainCancellationToken grainCancellationToken)
+    public ValueTask SubscribeAsync(IMapChatObserver mapChat)
     {
-        if (!_characterNames.TryGetValue(userId, out var name))
-            throw new ArgumentException($"Character#{userId:N} not found", nameof(userId));
-
-        var data = new ChatData(Sender: "<system>", Message: $"{name} leave.");
-
-        _chatObservers.NotifyIgnoreWarning(o => o.Receive(data));
-
-        return ValueTask.CompletedTask;
-    }
-
-    public async ValueTask SubscribeChatAsync(Guid userId, IMapChatObserver mapChat, GrainCancellationToken grainCancellationToken)
-    {
-        var user = grainFactory.GetGrain<IUserGrain>(userId);
-        var userData = await user.GetDataAsync(grainCancellationToken);
-        _characterNames[userId] = userData.Name;
-
-        var exists = _chats.ToList();
-
+        logger.LogInformation(nameof(SubscribeAsync));
         _chatObservers.Subscribe(mapChat, mapChat);
-
-        foreach (var exist in exists)
-            _chatObservers.NotifyIgnoreWarning(o => o.Receive(exist), o => o == mapChat);
+        return ValueTask.CompletedTask;
     }
 
-    public ValueTask UnsubscribeChatAsync(IMapChatObserver mapCharacter)
+    public ValueTask UnsubscribeAsync(IMapChatObserver mapChat)
     {
-        _chatObservers.Unsubscribe(mapCharacter);
+        _chatObservers.Unsubscribe(mapChat);
         return ValueTask.CompletedTask;
+    }
+
+    public async ValueTask JoinAsync(Guid userId, GrainCancellationToken grainCancellationToken)
+    {
+        if (!_characterNames.ContainsKey(userId))
+        {
+            var user = grainFactory.GetGrain<IUserGrain>(userId);
+            var userData = await user.GetDataAsync(grainCancellationToken);
+            _characterNames[userId] = userData.Name;
+        }
+
+        foreach (var chatData in _chats)
+            _chatObservers.NotifyIgnoreWarning(o => o.Receive(chatData));
     }
 
     public ValueTask<ChatData> ChatAsync(Guid userId, string message, GrainCancellationToken grainCancellationToken)
@@ -77,6 +74,21 @@ sealed class ChatRoomGrain(
         _chatObservers.NotifyIgnoreWarning(o => o.Receive(newData));
 
         return ValueTask.FromResult(newData);
+    }
+
+    public async ValueTask LeaveAsync(Guid userId, GrainCancellationToken grainCancellationToken)
+    {
+        if (!_characterNames.TryGetValue(userId, out var name))
+        {
+            var user = grainFactory.GetGrain<IUserGrain>(userId);
+            var userData = await user.GetDataAsync(grainCancellationToken);
+            name = userData.Name;
+        }
+        else
+            _characterNames.Remove(userId);
+
+        var data = new ChatData(Sender: "<system>", Message: $"{name} leave.");
+        _chatObservers.NotifyIgnoreWarning(o => o.Receive(data));
     }
 }
 

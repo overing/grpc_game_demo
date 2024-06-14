@@ -1,19 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using GameClient;
 using GameCore.Models;
-using GameCore.Protos;
 using Grpc.Core;
 using UnityEngine;
-
-using Vector2 = UnityEngine.Vector2;
-using Debug = UnityEngine.Debug;
-using System.Collections;
-using Cysharp.Threading.Tasks;
 
 public sealed class MainScreen : MonoBehaviour
 {
@@ -33,134 +26,9 @@ public sealed class MainScreen : MonoBehaviour
         _serverTime = Service.GetRequiredService<ServerTime>();
         _player = Service.GetRequiredService<Player>();
 
-        var request = new SyncCharactersRequest { ID = _player.ID.ToString("N") };
-        var duplex = _client.Client.SyncCharacters(cancellationToken: destroyCancellationToken);
-        _ = ResendAsync(duplex, request, TimeSpan.FromSeconds(10), destroyCancellationToken);
-        _ = SyncCharactersAsync(duplex, destroyCancellationToken);
-        _ = SyncChstAsync(destroyCancellationToken);
+        _ = SyncCharactersAsync();
+        _ = SyncChstAsync();
     }
-
-    async ValueTask SyncChstAsync(CancellationToken cancellationToken)
-    {
-        var stream = _client.SyncChatAsync(_player.ID, cancellationToken);
-        try
-        {
-            await foreach (var data in stream.WithCancellation(cancellationToken))
-                _chats.Enqueue(data);
-        }
-        catch (Exception ex)
-        {
-            if (cancellationToken.IsCancellationRequested)
-                return;
-            Debug.LogException(ex);
-            var screen = new GameObject(nameof(FaultScreen)).AddComponent<FaultScreen>();
-            screen.ErrorMessage = "Connection faulted, need login again, will back to title screen.";
-            screen.OkClicked += c =>
-            {
-                new GameObject(nameof(TitleScreen), typeof(TitleScreen));
-                Destroy(c.gameObject);
-            };
-            Destroy(gameObject);
-        }
-    }
-
-    async ValueTask SyncCharactersAsync(
-        AsyncDuplexStreamingCall<SyncCharactersRequest, SyncCharactersResponse> duplex,
-        CancellationToken cancellationToken)
-    {
-        await foreach (var response in duplex.ResponseStream.ReadAllAsync(cancellationToken))
-        {
-            var character = response.Character;
-
-            var characterData = new CharacterData(
-                ID: Guid.Parse(character.ID),
-                Name: character.Name,
-                Skin: character.Skin,
-                Position: new(character.Position.X, character.Position.Y));
-            var data = new SyncCharacterData(
-                Action: (SyncCharacterAction)response.Action,
-                Character: characterData);
-
-            HandleSyncCharacterData(data);
-        }
-    }
-
-    async UniTask ResendAsync(
-        AsyncDuplexStreamingCall<SyncCharactersRequest, SyncCharactersResponse> duplex,
-        SyncCharactersRequest request,
-        TimeSpan inteval,
-        CancellationToken cancellationToken)
-    {
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            Debug.LogWarning($"T#{Environment.CurrentManagedThreadId} Before WriteAsync");
-            await duplex.RequestStream.WriteAsync(request);
-            Debug.LogWarning($"T#{Environment.CurrentManagedThreadId} After WriteAsync");
-
-            Debug.LogWarning($"T#{Environment.CurrentManagedThreadId} After Restart");
-            await UniTask.Delay(inteval, cancellationToken: cancellationToken);
-            Debug.LogWarning($"T#{Environment.CurrentManagedThreadId} After While");
-        }
-    }
-
-    void HandleSyncCharacterData(SyncCharacterData data)
-    {
-        switch (data.Action)
-        {
-            case SyncCharacterAction.Add:
-                var addId = data.Character.ID.ToString("N");
-                if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == addId) is CharacterController2D forExists)
-                    Destroy(forExists.gameObject);
-                var prefab = Resources.Load<GameObject>("Prefabs/Character");
-                var instance = Instantiate(prefab, Vector3.zero, Quaternion.identity, transform);
-                if (data.Character.ID == _player.ID)
-                    instance.AddComponent<SendMoveToClickPoint>();
-                instance.name = addId;
-                instance.transform.position = new Vector2(data.Character.Position.X, data.Character.Position.Y);
-                break;
-
-            case SyncCharacterAction.Move:
-                var moveId = data.Character.ID.ToString("N");
-                if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == moveId) is CharacterController2D forMove)
-                    forMove.SmoothMoveTo(new Vector2(data.Character.Position.X, data.Character.Position.Y));
-                else
-                    Debug.LogWarningFormat("Move id#{0} not found", moveId);
-                break;
-
-            case SyncCharacterAction.Delete:
-                var deleteId = data.Character.ID.ToString("N");
-                if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == deleteId) is CharacterController2D forDelete)
-                    Destroy(forDelete.gameObject);
-                else
-                    Debug.LogWarningFormat("Delete id#{0} not found", deleteId);
-                break;
-        }
-    }
-
-    // async ValueTask SyncCharactersAsync(CancellationToken cancellationToken)
-    // {
-    //     _client.Log += Debug.LogWarning;
-    //     var stream = _client.SyncCharactersAsync(_player.ID, cancellationToken);
-    //     try
-    //     {
-    //         await foreach (var data in stream.WithCancellation(cancellationToken))
-    //             HandleSyncCharacterData(data);
-    //     }
-    //     catch (Exception ex)
-    //     {
-    //         if (cancellationToken.IsCancellationRequested)
-    //             return;
-    //         Debug.LogException(ex);
-    //         var screen = new GameObject(nameof(FaultScreen)).AddComponent<FaultScreen>();
-    //         screen.ErrorMessage = "Connection faulted, need login again, will back to title screen.";
-    //         screen.OkClicked += c =>
-    //         {
-    //             new GameObject(nameof(TitleScreen), typeof(TitleScreen));
-    //             Destroy(c.gameObject);
-    //         };
-    //         Destroy(gameObject);
-    //     }
-    // }
 
     void OnGUI()
     {
@@ -265,6 +133,55 @@ public sealed class MainScreen : MonoBehaviour
             Debug.LogException(ex);
             _task = null;
         }
+    }
+
+    UniTask SyncCharactersAsync()
+    {
+        var duplex = _client.Client.SyncCharacters(cancellationToken: destroyCancellationToken);
+        return duplex.ContinueAsync(new() { ID = _player.ID.ToString("N") }, TimeSpan.FromSeconds(30), response =>
+        {
+            var character = response.Character;
+            switch ((SyncCharacterAction)response.Action)
+            {
+                case SyncCharacterAction.Add:
+                    var addId = character.ID;
+                    if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == addId) is CharacterController2D forExists)
+                        Destroy(forExists.gameObject);
+                    var prefab = Resources.Load<GameObject>("Prefabs/Character");
+                    var instance = Instantiate(prefab, Vector3.zero, Quaternion.identity, transform);
+                    if (character.ID == _player.ID.ToString("N"))
+                        instance.AddComponent<SendMoveToClickPoint>();
+                    instance.name = addId;
+                    instance.transform.position = new Vector2(character.Position.X, character.Position.Y);
+                    break;
+
+                case SyncCharacterAction.Move:
+                    var moveId = character.ID;
+                    if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == moveId) is CharacterController2D forMove)
+                        forMove.SmoothMoveTo(new Vector2(character.Position.X, character.Position.Y));
+                    else
+                        Debug.LogWarningFormat("Move id#{0} not found", moveId);
+                    break;
+
+                case SyncCharacterAction.Delete:
+                    var deleteId = character.ID;
+                    if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == deleteId) is CharacterController2D forDelete)
+                        Destroy(forDelete.gameObject);
+                    else
+                        Debug.LogWarningFormat("Delete id#{0} not found", deleteId);
+                    break;
+            }
+        }, destroyCancellationToken);
+    }
+
+    UniTask SyncChstAsync()
+    {
+        var duplex = _client.Client.SyncChat(cancellationToken: destroyCancellationToken);
+        return duplex.ContinueAsync(new() { ID = _player.ID.ToString("N") }, TimeSpan.FromSeconds(30), response =>
+        {
+            var data = new ChatData(response.Sender, response.Message);
+            _chats.Enqueue(data);
+        }, destroyCancellationToken);
     }
 
     async ValueTask LogoutAsync()

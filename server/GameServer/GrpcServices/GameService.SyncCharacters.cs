@@ -29,12 +29,11 @@ public sealed partial class GameService
                 bool joined = false;
                 await foreach (var data in requestStream.ReadAllAsync(context.CancellationToken))
                 {
-                    _logger.LogInformation(nameof(data));
                     var id = Guid.Parse(data.ID);
                     userId = id;
                     var user = _clusterClient.GetGrain<IUserGrain>(id);
 
-                    await map.SubscribeCharacterAsync(observerReference);
+                    await map.SubscribeAsync(observerReference);
                     if (joined)
                         continue;
 
@@ -47,7 +46,7 @@ public sealed partial class GameService
             {
                 if (userId is Guid id)
                     await map.LeaveAsync(id, cts.Token);
-                await map.UnsubscribeCharacterAsync(observerReference);
+                await map.UnsubscribeAsync(observerReference);
             }
         }
     }

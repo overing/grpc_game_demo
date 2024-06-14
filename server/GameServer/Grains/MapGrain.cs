@@ -8,11 +8,11 @@ namespace GameServer.Grains;
 [Alias("GameServer.Grains.IMapGrain")]
 public interface IMapGrain : IGrainWithIntegerKey
 {
-    [Alias("SubscribeCharacterAsync")]
-    ValueTask SubscribeCharacterAsync(IMapCharacterObserver mapCharacter);
+    [Alias("SubscribeAsync")]
+    ValueTask SubscribeAsync(IMapCharacterObserver mapCharacter);
 
-    [Alias("UnsubscribeCharacterAsync")]
-    ValueTask UnsubscribeCharacterAsync(IMapCharacterObserver mapCharacter);
+    [Alias("UnsubscribeAsync")]
+    ValueTask UnsubscribeAsync(IMapCharacterObserver mapCharacter);
 
     [Alias("JoinAsync")]
     ValueTask JoinAsync(Guid userId, GrainCancellationToken grainCancellationToken);
@@ -37,14 +37,14 @@ sealed class MapGrain(
 
     readonly ObserverManager<IMapChatObserver> _chatObservers = new(TimeSpan.FromMinutes(3), logger);
 
-    public ValueTask SubscribeCharacterAsync(IMapCharacterObserver mapCharacter)
+    public ValueTask SubscribeAsync(IMapCharacterObserver mapCharacter)
     {
-        logger.LogInformation(nameof(SubscribeCharacterAsync));
+        logger.LogInformation(nameof(SubscribeAsync));
         _characterObservers.Subscribe(mapCharacter, mapCharacter);
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask UnsubscribeCharacterAsync(IMapCharacterObserver mapCharacter)
+    public ValueTask UnsubscribeAsync(IMapCharacterObserver mapCharacter)
     {
         _characterObservers.Unsubscribe(mapCharacter);
         return ValueTask.CompletedTask;

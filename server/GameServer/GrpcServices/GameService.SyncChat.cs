@@ -21,22 +21,32 @@ public sealed partial class GameService
             var logger = context.GetHttpContext().RequestServices.GetRequiredService<ILogger<MapChatObserver>>();
             var observer = new MapChatObserver(logger, responseStream, context.CancellationToken);
             var observerReference = _clusterClient.CreateObjectReference<IMapChatObserver>(observer);
+            var chatRoom = _clusterClient.GetGrain<IChatRoomGrain>(ChatRoomID);
 
+            Guid? userId = null;
             try
             {
-                var chatRoom = _clusterClient.GetGrain<IChatRoomGrain>(ChatRoomID);
+                bool joined = false;
                 await foreach (var data in requestStream.ReadAllAsync(context.CancellationToken))
                 {
-                    var userId = Guid.Parse(data.ID);
-                    var user = _clusterClient.GetGrain<IUserGrain>(userId);
+                    var id = Guid.Parse(data.ID);
+                    userId = id;
+                    var user = _clusterClient.GetGrain<IUserGrain>(id);
 
-                    await chatRoom.SubscribeChatAsync(userId, observerReference, cts.Token);
-                    _logger.LogInformation("UserId#{userId} join to chat", userId);
+                    await chatRoom.SubscribeAsync(observerReference);
+                    if (joined)
+                        continue;
+
+                    await chatRoom.JoinAsync(id, cts.Token);
+                    joined = true;
+                    _logger.LogInformation("UserId#{userId} join to chat", id);
                 }
-                await chatRoom.UnsubscribeChatAsync(observerReference);
             }
             catch (OperationCanceledException)
             {
+                if (userId is Guid id)
+                    await chatRoom.LeaveAsync(id, cts.Token);
+                await chatRoom.UnsubscribeAsync(observerReference);
             }
         }
     }
