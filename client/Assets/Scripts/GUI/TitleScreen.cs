@@ -1,17 +1,24 @@
 using System;
 using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using GameClient;
-using GameCore.Models;
+using Grpc.Core;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public sealed class TitleScreen : MonoBehaviour
 {
     string _userId;
 
-    bool _guiInitialized;
+    [SerializeField]
+    Button _startButton;
 
-    Task<LoginData> _loginTask;
-    Exception _loginError;
+    [SerializeField]
+    Text _clientIdText;
+
+    [SerializeField]
+    Text _errorText;
 
     void Start()
     {
@@ -19,58 +26,26 @@ public sealed class TitleScreen : MonoBehaviour
             PlayerPrefs.SetString("user_id", _userId = userId = Guid.NewGuid().ToString("N"));
         else
             _userId = userId;
+
+        _errorText.text = string.Empty;
+        _clientIdText.text = _userId;
+        _startButton.onClick.AddListener(OnClickPanel);
     }
 
-    void OnGUI()
+    void OnClickPanel()
     {
-        if (!_guiInitialized)
-        {
-            var height = Screen.height;
-            GUI.skin = Resources.Load<GUISkin>("GUISkin");
-            GUI.skin.label.fontSize = height / 18;
-            GUI.skin.textField.fontSize = height / 20;
-            GUI.skin.button.fontSize = height / 20;
-            _guiInitialized = true;
-        }
-
-        bool clickStart;
-        using (new GUILayout.VerticalScope(GUI.skin.box, GUILayout.Width(Screen.width), GUILayout.Height(Screen.height)))
-        {
-            GUILayout.FlexibleSpace();
-
-            using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
-            {
-                GUILayout.Label("Client ID:", GUILayout.ExpandWidth(false));
-                GUILayout.TextField(_userId, GUILayout.ExpandWidth(true));
-            }
-
-            GUI.enabled = _loginTask is null;
-            clickStart = GUILayout.Button("START", GUILayout.ExpandWidth(false));
-            GUI.enabled = true;
-
-            if (_loginError is { } exception)
-            {
-                using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
-                {
-                    GUILayout.Label("Error:", GUILayout.ExpandWidth(false));
-                    GUILayout.TextArea(exception.Message, GUILayout.ExpandWidth(true));
-                }
-            }
-
-            GUILayout.FlexibleSpace();
-        }
-        if (clickStart)
-            _ = LoginAsync();
+        _ = LoginAsync();
     }
 
-    async ValueTask LoginAsync()
+    async UniTask LoginAsync()
     {
         try
         {
-            _loginError = null;
+            _startButton.interactable = false;
+            _startButton.GetComponentInChildren<Text>().text = "CONNECTION ...";
+            _errorText.text = string.Empty;
             var client = Service.GetRequiredService<IGameApiClient>();
-            _loginTask = client.LoginAsync(_userId, destroyCancellationToken).AsTask();
-            var data = await _loginTask;
+            var data = await client.LoginAsync(_userId, destroyCancellationToken);
 
             var serverTime = Service.GetRequiredService<ServerTime>();
             serverTime.Load(data.ServerTime);
@@ -78,18 +53,19 @@ public sealed class TitleScreen : MonoBehaviour
             var player = Service.GetRequiredService<Player>();
             player.Load(data.User);
 
-            new GameObject(nameof(MainScreen), typeof(MainScreen));
-            Destroy(gameObject);
+            await SceneManager.LoadSceneAsync("MainScene");
         }
         catch (TaskCanceledException)
         {
-            _loginTask = null;
+            _startButton.GetComponentInChildren<Text>().text = "START";
+            _startButton.interactable = true;
         }
         catch (Exception ex)
         {
-            _loginError = ex;
+            _errorText.text = ex is RpcException rpcEx ? $"Rpc Error: {rpcEx.Status.DebugException.Message}" : $"Error: {ex.Message}";
             Debug.LogException(ex);
-            _loginTask = null;
+            _startButton.GetComponentInChildren<Text>().text = "START";
+            _startButton.interactable = true;
         }
     }
 }

@@ -53,9 +53,6 @@ public static class Service
 #endif
     }
 
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    static void CreateTitleScreen() => new GameObject(nameof(TitleScreen), typeof(TitleScreen));
-
     // [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     // static void CreateTestScreen()
     // {

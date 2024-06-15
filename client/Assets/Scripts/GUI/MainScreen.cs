@@ -7,6 +7,8 @@ using GameClient;
 using GameCore.Models;
 using Grpc.Core;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public sealed class MainScreen : MonoBehaviour
 {
@@ -16,9 +18,20 @@ public sealed class MainScreen : MonoBehaviour
 
     Task _task;
 
-    readonly Queue<ChatData> _chats = new();
-    Vector2 _messageScrollPosition;
-    string _input;
+    [SerializeField]
+    Transform _chatContent;
+
+    [SerializeField]
+    Text _templateChatText;
+
+    [SerializeField]
+    InputField _chatInputField;
+
+    [SerializeField]
+    Button _chatButton;
+
+    [SerializeField]
+    Text _nameText;
 
     void Start()
     {
@@ -26,79 +39,49 @@ public sealed class MainScreen : MonoBehaviour
         _serverTime = Service.GetRequiredService<ServerTime>();
         _player = Service.GetRequiredService<Player>();
 
+        _nameText.text = _player.Name;
+
+        _templateChatText.gameObject.SetActive(false);
+
+        _chatButton.onClick.AddListener(OnChatButtonClick);
+
         _ = SyncCharactersAsync();
         _ = SyncChstAsync();
     }
 
-    void OnGUI()
+    void OnChatButtonClick()
     {
-        bool clickLogout;
-        bool clickSend;
-        using (new GUILayout.VerticalScope(GUI.skin.box, GUILayout.Width(Screen.width), GUILayout.Height(Screen.height)))
-        {
-            using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
-            {
-                GUILayout.Label("ServerTime:", GUILayout.Width(GUI.skin.label.fontSize * 6));
-                GUILayout.TextField(_serverTime.Now.ToString(), GUILayout.ExpandWidth(true));
-            }
-            using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
-            {
-                GUILayout.Label("Name:", GUILayout.Width(GUI.skin.label.fontSize * 5));
-                GUILayout.TextField(_player.Name, GUILayout.ExpandWidth(true));
-                clickLogout = GUILayout.Button("LOGOUT", GUILayout.ExpandWidth(false));
-            }
-
-            GUILayout.FlexibleSpace();
-
-            using (var scroll = new GUILayout.ScrollViewScope(_messageScrollPosition, GUI.skin.box, GUILayout.ExpandWidth(true)))
-            {
-                _messageScrollPosition = scroll.scrollPosition;
-                foreach (var chat in _chats)
-                {
-                    using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
-                    {
-                        GUILayout.Label(chat.Sender, GUILayout.ExpandWidth(false));
-                        GUILayout.Label(chat.Message, GUILayout.ExpandWidth(true));
-                    }
-                }
-            }
-
-            using (new GUILayout.HorizontalScope(GUILayout.ExpandWidth(true)))
-            {
-                GUI.enabled = _task is null;
-                _input = GUILayout.TextField(_input, GUILayout.ExpandWidth(true));
-                clickSend = GUILayout.Button("SEND", GUILayout.ExpandWidth(false));
-                GUI.enabled = true;
-            }
-        }
-        if (clickLogout)
-            _ = LogoutAsync();
-        if (clickSend)
-            HandleSend();
-    }
-
-    void EnqueueSystemMessage(string message, string sender = "<system>")
-    {
-        _chats.Enqueue(new(sender, message));
-        while (_chats.Count > 64)
-            _chats.Dequeue();
-        _messageScrollPosition.y = float.MaxValue;
-    }
-
-    void HandleSend()
-    {
-        if (string.IsNullOrWhiteSpace(_input))
+        var input = _chatInputField.text;
+        if (string.IsNullOrWhiteSpace(input))
             return;
 
-        if (_input.Equals("/echo", StringComparison.InvariantCultureIgnoreCase))
+        if (input.Equals("/echo", StringComparison.InvariantCultureIgnoreCase))
         {
             _ = EchoAsync();
-            _input = string.Empty;
+            _chatInputField.text = string.Empty;
             return;
         }
 
-        _client.ChatAsync(_input);
-        _input = string.Empty;
+        if (input.Equals("/time", StringComparison.InvariantCultureIgnoreCase))
+        {
+            EnqueueChat(_serverTime.Now.ToString("F"));
+            _chatInputField.text = string.Empty;
+            return;
+        }
+
+        _client.ChatAsync(input);
+        _chatInputField.text = string.Empty;
+    }
+
+    void EnqueueChat(string message, string sender = "<system>")
+    {
+        var chat = Instantiate(_templateChatText, _templateChatText.transform.parent);
+        chat.name = "chat";
+        chat.text = $"{sender}: {message}";
+        chat.gameObject.SetActive(true);
+        while (_chatContent.childCount > 65)
+            Destroy(_chatContent.GetChild(0).gameObject);
+        // _messageScrollPosition.y = float.MaxValue;
     }
 
     async ValueTask EchoAsync()
@@ -109,19 +92,14 @@ public sealed class MainScreen : MonoBehaviour
             _task = task;
             var data = await task;
 
-            EnqueueSystemMessage(data.ToString());
+            EnqueueChat(data.ToString());
             _task = null;
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Unauthenticated)
         {
-            var screen = new GameObject(nameof(FaultScreen)).AddComponent<FaultScreen>();
-            screen.ErrorMessage = "Connection timeout, need login again, will back to title screen.";
-            screen.OkClicked += c =>
-            {
-                new GameObject(nameof(TitleScreen), typeof(TitleScreen));
-                Destroy(c.gameObject);
-            };
-            Destroy(gameObject);
+            _ = FaultScreen.CreateAsync(
+                message: "Connection timeout, need login again, will back to title screen.",
+                onClick: c => SceneManager.LoadScene("TitleScene"));
         }
         catch (TaskCanceledException)
         {
@@ -129,59 +107,89 @@ public sealed class MainScreen : MonoBehaviour
         }
         catch (Exception ex)
         {
-            EnqueueSystemMessage("Error: " + ex.ToString());
+            EnqueueChat("Error: " + ex.ToString());
             Debug.LogException(ex);
             _task = null;
         }
     }
 
-    UniTask SyncCharactersAsync()
+    async UniTask SyncCharactersAsync()
     {
         var duplex = _client.Client.SyncCharacters(cancellationToken: destroyCancellationToken);
-        return duplex.ContinueAsync(new() { ID = _player.ID.ToString("N") }, TimeSpan.FromSeconds(30), response =>
+        try
         {
-            var character = response.Character;
-            switch ((SyncCharacterAction)response.Action)
+            await duplex.ContinueAsync(new() { ID = _player.ID.ToString("N") }, TimeSpan.FromSeconds(30), response =>
             {
-                case SyncCharacterAction.Add:
-                    var addId = character.ID;
-                    if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == addId) is CharacterController2D forExists)
-                        Destroy(forExists.gameObject);
-                    var prefab = Resources.Load<GameObject>("Prefabs/Character");
-                    var instance = Instantiate(prefab, Vector3.zero, Quaternion.identity, transform);
-                    if (character.ID == _player.ID.ToString("N"))
-                        instance.AddComponent<SendMoveToClickPoint>();
-                    instance.name = addId;
-                    instance.transform.position = new Vector2(character.Position.X, character.Position.Y);
-                    break;
+                var character = response.Character;
+                switch ((SyncCharacterAction)response.Action)
+                {
+                    case SyncCharacterAction.Add:
+                        var addId = character.ID;
+                        if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == addId) is CharacterController2D forExists)
+                            Destroy(forExists.gameObject);
+                        var prefab = Resources.Load<GameObject>("Prefabs/Character");
+                        var instance = Instantiate(prefab, Vector3.zero, Quaternion.identity, transform);
+                        if (character.ID == _player.ID.ToString("N"))
+                            instance.AddComponent<SendMoveToClickPoint>();
+                        instance.name = addId;
+                        instance.transform.position = new Vector2(character.Position.X, character.Position.Y);
+                        break;
 
-                case SyncCharacterAction.Move:
-                    var moveId = character.ID;
-                    if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == moveId) is CharacterController2D forMove)
-                        forMove.SmoothMoveTo(new Vector2(character.Position.X, character.Position.Y));
-                    else
-                        Debug.LogWarningFormat("Move id#{0} not found", moveId);
-                    break;
+                    case SyncCharacterAction.Move:
+                        var moveId = character.ID;
+                        if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == moveId) is CharacterController2D forMove)
+                            forMove.SmoothMoveTo(new Vector2(character.Position.X, character.Position.Y));
+                        else
+                            Debug.LogWarningFormat("Move id#{0} not found", moveId);
+                        break;
 
-                case SyncCharacterAction.Delete:
-                    var deleteId = character.ID;
-                    if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == deleteId) is CharacterController2D forDelete)
-                        Destroy(forDelete.gameObject);
-                    else
-                        Debug.LogWarningFormat("Delete id#{0} not found", deleteId);
-                    break;
-            }
-        }, destroyCancellationToken);
+                    case SyncCharacterAction.Delete:
+                        var deleteId = character.ID;
+                        if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == deleteId) is CharacterController2D forDelete)
+                            Destroy(forDelete.gameObject);
+                        else
+                            Debug.LogWarningFormat("Delete id#{0} not found", deleteId);
+                        break;
+                }
+            }, destroyCancellationToken);
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
+        {
+            Debug.LogWarning("sync character connection canceled");
+        }
+        catch (RpcException ex)
+        {
+            EnqueueChat("Error: " + ex.Message);
+            Debug.LogException(ex);
+            _task = null;
+        }
     }
 
-    UniTask SyncChstAsync()
+    async UniTask SyncChstAsync()
     {
         var duplex = _client.Client.SyncChat(cancellationToken: destroyCancellationToken);
-        return duplex.ContinueAsync(new() { ID = _player.ID.ToString("N") }, TimeSpan.FromSeconds(30), response =>
+        try
         {
-            var data = new ChatData(response.Sender, response.Message);
-            _chats.Enqueue(data);
-        }, destroyCancellationToken);
+            await duplex.ContinueAsync(new() { ID = _player.ID.ToString("N") }, TimeSpan.FromSeconds(30), response =>
+            {
+                EnqueueChat(response.Message, response.Sender);
+            }, destroyCancellationToken);
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
+        {
+            Debug.LogWarning("sync chat connection canceled");
+        }
+        catch (RpcException ex)
+        {
+            EnqueueChat("Error: " + ex.Message);
+            Debug.LogException(ex);
+            _task = null;
+        }
+    }
+
+    void OnApplicationQuit()
+    {
+        _ = LogoutAsync();
     }
 
     async ValueTask LogoutAsync()
@@ -193,8 +201,7 @@ public sealed class MainScreen : MonoBehaviour
 
             _task = null;
 
-            new GameObject(nameof(TitleScreen), typeof(TitleScreen));
-            Destroy(gameObject);
+            await SceneManager.LoadSceneAsync("TitleScene");
         }
         catch (TaskCanceledException)
         {
@@ -202,8 +209,7 @@ public sealed class MainScreen : MonoBehaviour
         }
         catch (Exception ex)
         {
-            EnqueueSystemMessage("Error: " + ex.ToString());
-            Debug.LogException(ex);
+            Debug.LogWarning(ex.Message);
             _task = null;
         }
     }

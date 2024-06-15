@@ -1,31 +1,35 @@
 using System;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.UI;
 
 public sealed class FaultScreen : MonoBehaviour
 {
-    string _errorMessage;
+    [SerializeField]
+    Text _messageText;
 
-    public string ErrorMessage
+    [SerializeField]
+    Button _okButton;
+
+    public string Message
     {
-        set => _errorMessage = value;
+        set => _messageText.text = value;
     }
 
     public event Action<FaultScreen> OkClicked;
 
-    void OnGUI()
+    void Start()
     {
-        bool clickOk;
-        using (new GUILayout.VerticalScope(GUI.skin.box, GUILayout.Width(Screen.width), GUILayout.Height(Screen.height)))
-        {
-            GUILayout.FlexibleSpace();
+        _okButton.onClick.AddListener(() => OkClicked?.Invoke(this));
+    }
 
-            GUILayout.Label("Error", GUILayout.Width(GUI.skin.label.fontSize * 6));
-            GUILayout.TextField(_errorMessage, GUILayout.ExpandWidth(true));
-            clickOk = GUILayout.Button("OK", GUILayout.ExpandWidth(false));
-
-            GUILayout.FlexibleSpace();
-        }
-        if (clickOk)
-            OkClicked?.Invoke(this);
+    public static async UniTask<FaultScreen> CreateAsync(string message, Action<FaultScreen> onClick)
+    {
+        var prefab = (GameObject)await Resources.LoadAsync<GameObject>("Prefabs/GUI/FaultScreen");
+        var instance = Instantiate(prefab, Vector3.zero, Quaternion.identity);
+        var screen = instance.GetComponent<FaultScreen>();
+        screen.Message = message;
+        screen.OkClicked += onClick;
+        return screen;
     }
 }

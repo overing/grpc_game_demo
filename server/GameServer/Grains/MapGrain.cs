@@ -56,7 +56,7 @@ sealed class MapGrain(
         {
             var user = grainFactory.GetGrain<IUserGrain>(userId);
             var userData = await user.GetDataAsync(grainCancellationToken);
-            _characters[userId] = new CharacterData(userId, userData.Name, Skin: 1, new(X: 0, Y: 0));
+            _characters[userId] = new CharacterData(userId, userData.Name, Skin: 1, Position: new(X: 0, Y: 0));
         }
 
         foreach (var characterDatas in _characters.Values)
@@ -87,7 +87,7 @@ sealed class MapGrain(
         {
             var user = grainFactory.GetGrain<IUserGrain>(userId);
             var userData = await user.GetDataAsync(grainCancellationToken);
-            characterData = new CharacterData(userId, userData.Name, Skin: 1, new(X: 0, Y: 0));
+            characterData = new CharacterData(userId, userData.Name, Skin: 1, Position: new(X: 0, Y: 0));
         }
         else
             _characters.Remove(userId);

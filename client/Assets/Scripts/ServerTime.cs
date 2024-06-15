@@ -5,7 +5,7 @@ public sealed class ServerTime
 {
     double _loadTime;
     DateTimeOffset _serverTime;
-    public DateTimeOffset? Now => _serverTime.AddSeconds(Time.realtimeSinceStartupAsDouble - _loadTime);
+    public DateTimeOffset Now => _serverTime.AddSeconds(Time.realtimeSinceStartupAsDouble - _loadTime);
 
     public void Load(DateTimeOffset serverTime)
     {
