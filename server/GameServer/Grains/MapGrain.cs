@@ -15,7 +15,13 @@ public interface IMapGrain : IGrainWithIntegerKey
     ValueTask UnsubscribeAsync(IMapCharacterObserver mapCharacter);
 
     [Alias("JoinAsync")]
-    ValueTask JoinAsync(Guid userId, GrainCancellationToken grainCancellationToken);
+    ValueTask JoinAsync(UserData userData, GrainCancellationToken grainCancellationToken);
+
+    [Alias("ChangeNameAsync")]
+    ValueTask ChangeNameAsync(Guid userId, string newName, GrainCancellationToken grainCancellationToken);
+
+    [Alias("ChangeSkinAsync")]
+    ValueTask ChangeSkinAsync(Guid userId, byte newSkin, GrainCancellationToken grainCancellationToken);
 
     [Alias("MoveAsync")]
     ValueTask<CharacterData> MoveAsync(Guid userId, float x, float y, GrainCancellationToken grainCancellationToken);
@@ -25,8 +31,7 @@ public interface IMapGrain : IGrainWithIntegerKey
 }
 
 sealed class MapGrain(
-    ILogger<MapGrain> logger,
-    IGrainFactory grainFactory)
+    ILogger<MapGrain> logger)
     : Grain, IMapGrain
 {
     readonly Dictionary<Guid, CharacterData> _characters = [];
@@ -50,20 +55,60 @@ sealed class MapGrain(
         return ValueTask.CompletedTask;
     }
 
-    public async ValueTask JoinAsync(Guid userId, GrainCancellationToken grainCancellationToken)
+    public ValueTask JoinAsync(UserData userData, GrainCancellationToken grainCancellationToken)
     {
-        if (!_characters.ContainsKey(userId))
-        {
-            var user = grainFactory.GetGrain<IUserGrain>(userId);
-            var userData = await user.GetDataAsync(grainCancellationToken);
-            _characters[userId] = new CharacterData(userId, userData.Name, Skin: 1, Position: new(X: 0, Y: 0));
-        }
+        if (!_characters.ContainsKey(userData.ID))
+            _characters[userData.ID] = new CharacterData(
+                userData.ID,
+                userData.Name,
+                Skin: userData.Skin,
+                Position: new(X: userData.PosX, Y: userData.PosY));
 
         foreach (var characterDatas in _characters.Values)
         {
             var existData = new SyncCharacterData(SyncCharacterAction.Add, characterDatas);
             _characterObservers.NotifyIgnoreWarning(o => o.Receive(existData));
         }
+
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask ChangeNameAsync(Guid userId, string newName, GrainCancellationToken grainCancellationToken)
+    {
+        if (!_characters.TryGetValue(userId, out var originalCharacterData))
+            throw new ArgumentException($"Character#{userId:N} not found", nameof(userId));
+
+        var characterData = originalCharacterData with
+        {
+            Name = newName,
+        };
+
+        _characters[userId] = characterData;
+
+        var data = new SyncCharacterData(SyncCharacterAction.ChangeName, characterData);
+
+        _characterObservers.NotifyIgnoreWarning(o => o.Receive(data));
+
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask ChangeSkinAsync(Guid userId, byte newSkin, GrainCancellationToken grainCancellationToken)
+    {
+        if (!_characters.TryGetValue(userId, out var originalCharacterData))
+            throw new ArgumentException($"Character#{userId:N} not found", nameof(userId));
+
+        var characterData = originalCharacterData with
+        {
+            Skin = newSkin,
+        };
+
+        _characters[userId] = characterData;
+
+        var data = new SyncCharacterData(SyncCharacterAction.ChangeSkin, characterData);
+
+        _characterObservers.NotifyIgnoreWarning(o => o.Receive(data));
+
+        return ValueTask.CompletedTask;
     }
 
     public ValueTask<CharacterData> MoveAsync(Guid userId, float x, float y, GrainCancellationToken grainCancellationToken)
@@ -81,19 +126,17 @@ sealed class MapGrain(
         return ValueTask.FromResult(chatacterData);
     }
 
-    public async ValueTask LeaveAsync(Guid userId, GrainCancellationToken grainCancellationToken)
+    public ValueTask LeaveAsync(Guid userId, GrainCancellationToken grainCancellationToken)
     {
         if (!_characters.TryGetValue(userId, out var characterData))
-        {
-            var user = grainFactory.GetGrain<IUserGrain>(userId);
-            var userData = await user.GetDataAsync(grainCancellationToken);
-            characterData = new CharacterData(userId, userData.Name, Skin: 1, Position: new(X: 0, Y: 0));
-        }
-        else
-            _characters.Remove(userId);
+            throw new ArgumentException($"Character#{userId:N} not found", nameof(userId));
+
+        _characters.Remove(userId);
 
         var data = new SyncCharacterData(SyncCharacterAction.Delete, characterData);
         _characterObservers.NotifyIgnoreWarning(o => o.Receive(data));
+
+        return ValueTask.CompletedTask;
     }
 }
 
@@ -112,21 +155,34 @@ sealed class MapCharacterObserver(
     public async ValueTask Receive(SyncCharacterData data)
     {
         var characterData = data.Character;
-        var response = new SyncCharactersResponse
+        var response = new SyncCharactersResponse { ID = characterData.ID.ToString("N") };
+        switch (data.Action)
         {
-            Action = (int)data.Action,
-            Character = new Character
-            {
-                ID = characterData.ID.ToString("N"),
-                Name = characterData.Name,
-                Skin = characterData.Skin,
-                Position = new Vector2
+            case SyncCharacterAction.Add:
+                response.Join = new()
                 {
-                    X = characterData.Position.X,
-                    Y = characterData.Position.Y,
-                },
-            },
-        };
+                    Name = characterData.Name,
+                    Skin = characterData.Skin,
+                    Position = characterData.Position.ToVector2(),
+                };
+                break;
+
+            case SyncCharacterAction.Delete:
+                response.Leave = new();
+                break;
+
+            case SyncCharacterAction.Move:
+                response.Move = characterData.Position.ToVector2();
+                break;
+
+            case SyncCharacterAction.ChangeName:
+                response.Rename = characterData.Name;
+                break;
+
+            case SyncCharacterAction.ChangeSkin:
+                response.Skin = characterData.Skin;
+                break;
+        }
         await responseStream.WriteAsync(response, cancellationToken);
         logger.LogInformation("Write sync character: {data}", data);
     }

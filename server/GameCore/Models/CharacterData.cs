@@ -5,5 +5,9 @@ namespace GameCore.Models;
 public sealed record class CharacterData(
     Guid ID,
     string Name,
-    int Skin,
-    PointFloat Position);
+    byte Skin,
+    PointFloat Position)
+{
+    public static string CutNameForDisplay(string name)
+        => name.Length > 7 ? name[..7] + "..." : name;
+}

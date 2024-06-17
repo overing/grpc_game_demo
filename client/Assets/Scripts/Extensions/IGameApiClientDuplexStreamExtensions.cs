@@ -14,6 +14,7 @@ public static class IGameApiClientDuplexStreamExtensions
         CancellationToken cancellationToken = default)
     {
         _ = ResendRequestAsync(cancellationToken);
+
         await foreach (var response in duplex.ResponseStream.ReadAllAsync(cancellationToken))
             responseHandler(response);
 
@@ -32,6 +33,7 @@ public static class IGameApiClientDuplexStreamExtensions
         CancellationToken cancellationToken = default)
     {
         return ContinueAsync(duplex, GenerateRequest, responseHandler, cancellationToken);
+
         async IAsyncEnumerable<TRequest> GenerateRequest([EnumeratorCancellation] CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)

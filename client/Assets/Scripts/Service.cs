@@ -53,14 +53,6 @@ public static class Service
 #endif
     }
 
-    // [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    // static void CreateTestScreen()
-    // {
-    //     var prefab = Resources.Load<GameObject>("Prefabs/Character");
-    //     var instance = UnityEngine.Object.Instantiate(prefab, Vector3.zero, Quaternion.identity);
-    //     instance.AddComponent<MoveToClickPoint>();
-    // }
-
     public static TService GetService<TService>() => _serviceProvider.GetService<TService>();
 
     public static TService GetRequiredService<TService>() => _serviceProvider.GetRequiredService<TService>();

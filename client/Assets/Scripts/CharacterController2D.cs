@@ -1,11 +1,13 @@
 using System.Collections;
-using System.Threading;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(Animator))]
 public sealed class CharacterController2D : MonoBehaviour
 {
+    [SerializeField]
+    TextMesh _nameTextMesh;
+
     [SerializeField]
     [Range(0, 5)]
     float _moveTime = .2f;
@@ -24,6 +26,8 @@ public sealed class CharacterController2D : MonoBehaviour
         _rigidbody = GetComponent<Rigidbody2D>();
         _animator = GetComponent<Animator>();
     }
+
+    public void SetName(string name) => _nameTextMesh.text = name;
 
     public void SmoothMoveTo(Vector2 targetPosition)
     {
@@ -45,7 +49,7 @@ public sealed class CharacterController2D : MonoBehaviour
 
         _rigidbody.velocity = Vector2.zero;
         gameObject.transform.position = targetPosition;
-        _animator.SetTrigger("idel");
+        _animator.SetTrigger("idle");
     }
 
     void TriggerMoveAnime(Vector2 moving)

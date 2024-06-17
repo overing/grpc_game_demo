@@ -14,17 +14,22 @@ public sealed partial class GameService
         var identity = context.GetHttpContext().User.Identity;
         if (identity is not ClaimsIdentity id ||
             id.Claims.FirstOrDefault(c => c.Type == "GameUserID") is not Claim claim ||
-            claim.Value is not string userId)
+            claim.Value is not string rawUserId)
         {
             context.Status = new Status(StatusCode.Unauthenticated, "Need login.");
             return new();
         }
 
-        using var cts = new GrainCancellationTokenSource();
-        using (context.CancellationToken.Register(static state => ((GrainCancellationTokenSource)state!).Cancel().Ignore(), cts))
+        using var gcts = new GrainCancellationTokenSource();
+        using (context.CancellationToken.Register(static state => ((GrainCancellationTokenSource)state!).Cancel().Ignore(), gcts))
         {
+            var userId = Guid.Parse(rawUserId);
+
+            var user = _clusterClient.GetGrain<IUserGrain>(userId);
+            await user.SetPositionAsync(new(request.Position.X, request.Position.Y), gcts.Token);
+
             var map = _clusterClient.GetGrain<IMapGrain>(MapID);
-            var characterData = await map.MoveAsync(Guid.Parse(userId), request.Position.X, request.Position.Y, cts.Token);
+            var characterData = await map.MoveAsync(userId, request.Position.X, request.Position.Y, gcts.Token);
 
             var response = new MoveResponse
             {

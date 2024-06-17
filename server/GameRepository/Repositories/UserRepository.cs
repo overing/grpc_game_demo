@@ -21,6 +21,12 @@ public interface IUserRepository
         string email,
         CancellationToken cancellationToken = default);
 
+    ValueTask<UserData?> UpdateNameAsync(Guid id, string newName);
+
+    ValueTask<UserData?> UpdateSkinAsync(Guid id, byte newSkin);
+
+    ValueTask<UserData?> UpdatePositionAsync(Guid id, float x, float y);
+
     ValueTask UpdateLoginTimeAsync(Guid id, DateTimeOffset dateTime);
 }
 
@@ -32,14 +38,14 @@ internal sealed class UserRepository(
     public async IAsyncEnumerable<UserData> GetAllAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach (var user in dbContext.Set<User>().AsNoTracking().AsAsyncEnumerable().WithCancellation(cancellationToken))
-            yield return new(user.ID, user.Name, user.Email);
+            yield return new(user.ID, user.Name, user.Email, user.Skin, user.PosX, user.PosY);
     }
 
     public async ValueTask<UserData?> GetWithIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await dbContext.Set<User>()
             .Where(u => u.ID == id)
-            .Select(u => new UserData(u.ID, u.Name, u.Email))
+            .Select(u => new UserData(u.ID, u.Name, u.Email, u.Skin, u.PosX, u.PosY))
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -49,7 +55,7 @@ internal sealed class UserRepository(
 
         return await dbContext.Set<User>()
             .Where(u => u.Account == account)
-            .Select(u => new UserData(u.ID, u.Name, u.Email))
+            .Select(u => new UserData(u.ID, u.Name, u.Email, u.Skin, u.PosX, u.PosY))
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -79,7 +85,57 @@ internal sealed class UserRepository(
         if (affected == 0)
             throw new Exception("Save to db affected row is 0.");
 
-        return new(user.ID, user.Name, user.Email);
+        return new(user.ID, user.Name, user.Email, user.Skin, user.PosX, user.PosY);
+    }
+
+    public async ValueTask<UserData?> UpdateNameAsync(Guid id, string newName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(newName);
+
+        var user = await dbContext.Set<User>().FirstOrDefaultAsync(u => u.ID == id);
+
+        if (user is null)
+            return null;
+
+        user.Name = newName;
+        user.UpdatedAt = DateTimeOffset.Now;
+
+        await dbContext.SaveChangesAsync();
+
+        return new(user.ID, user.Name, user.Email, user.Skin, user.PosX, user.PosY);
+    }
+
+    public async ValueTask<UserData?> UpdateSkinAsync(Guid id, byte newSkin)
+    {
+        if (newSkin < 1 || newSkin > 2)
+            throw new ArgumentOutOfRangeException(nameof(newSkin), newSkin, "must between 1 and 2");
+
+        var user = await dbContext.Set<User>().FirstOrDefaultAsync(u => u.ID == id);
+
+        if (user is null)
+            return null;
+
+        user.Skin = newSkin;
+        user.UpdatedAt = DateTimeOffset.Now;
+
+        await dbContext.SaveChangesAsync();
+
+        return new(user.ID, user.Name, user.Email, user.Skin, user.PosX, user.PosY);
+    }
+
+    public async ValueTask<UserData?> UpdatePositionAsync(Guid id, float x, float y)
+    {
+        var user = await dbContext.Set<User>().FirstOrDefaultAsync(u => u.ID == id);
+
+        if (user is null)
+            return null;
+
+        (user.PosX, user.PosY) = (x, y);
+        user.UpdatedAt = DateTimeOffset.Now;
+
+        await dbContext.SaveChangesAsync();
+
+        return new(user.ID, user.Name, user.Email, user.Skin, user.PosX, user.PosY);
     }
 
     public async ValueTask UpdateLoginTimeAsync(Guid id, DateTimeOffset dateTime)
@@ -90,6 +146,7 @@ internal sealed class UserRepository(
             return;
 
         user.LastLoginAt = dateTime;
+        user.UpdatedAt = dateTime;
 
         await dbContext.SaveChangesAsync();
     }

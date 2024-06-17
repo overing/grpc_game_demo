@@ -1,4 +1,4 @@
-using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using GameClient;
 using Grpc.Core;
 using UnityEngine;
@@ -7,6 +7,10 @@ using UnityEngine.SceneManagement;
 
 public sealed class SendMoveToClickPoint : MonoBehaviour
 {
+    IGameApiClient _client;
+
+    void Awake() => _client = Service.GetRequiredService<IGameApiClient>();
+
     void LateUpdate()
     {
         if (Input.GetMouseButtonDown(0))
@@ -17,15 +21,22 @@ public sealed class SendMoveToClickPoint : MonoBehaviour
             var mousePos = Input.mousePosition;
             mousePos = new(mousePos.x, mousePos.y, Camera.main.nearClipPlane);
             var targetPos = (Vector2)Camera.main.ScreenToWorldPoint(mousePos);
-            var client = Service.GetRequiredService<IGameApiClient>();
-            _ = client.MoveAsync(targetPos.x, targetPos.y, destroyCancellationToken).AsTask().ContinueWith(t =>
-            {
-                var ex = t.Exception.Flatten().InnerException;
-                if (ex is RpcException rpcException && rpcException.StatusCode == StatusCode.Unauthenticated)
-                    _ = FaultScreen.CreateAsync(
-                        message: "Connection timeout, need login again, will back to title screen.",
-                        onClick: c => SceneManager.LoadScene("TitleScene"));
-            }, TaskContinuationOptions.OnlyOnFaulted);
+            _ = SendMoveAsync(targetPos);
+        }
+    }
+
+    async UniTask SendMoveAsync(Vector2 targetPos)
+    {
+        try
+        {
+            await _client.MoveAsync(targetPos.x, targetPos.y, destroyCancellationToken);
+        }
+        catch (RpcException rpcException)
+        {
+            if (rpcException.StatusCode == StatusCode.Unauthenticated)
+                _ = FaultScreen.CreateAsync(
+                    message: "Connection timeout, need login again, will back to title screen.",
+                    onClick: c => SceneManager.LoadScene("TitleScene"));
         }
     }
 }

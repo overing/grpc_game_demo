@@ -21,6 +21,15 @@ public sealed record class User
     [Column("email")]
     public string Email { get; set; } = null!;
 
+    [Column("skin")]
+    public byte Skin { get; set; }
+
+    [Column("pos_x")]
+    public float PosX { get; set; }
+
+    [Column("pos_y")]
+    public float PosY { get; set; }
+
     [Column("last_login_at")]
     public DateTimeOffset LastLoginAt { get; set; }
 

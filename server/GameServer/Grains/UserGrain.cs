@@ -9,6 +9,15 @@ public interface IUserGrain : IGrainWithGuidKey
     [Alias("EchoAsync")]
     ValueTask<EchoData> EchoAsync(DateTimeOffset clientTime, DateTimeOffset gatewayTime, GrainCancellationToken cancellationToken);
 
+    [Alias("SetPositionAsync")]
+    ValueTask<UserData> SetPositionAsync(PointFloat position, GrainCancellationToken cancellationToken);
+
+    [Alias("ChangeNameAsync")]
+    ValueTask<UserData> ChangeNameAsync(string newName, GrainCancellationToken cancellationToken);
+
+    [Alias("ChangeSkinAsync")]
+    ValueTask<UserData> ChangeSkinAsync(byte newSkin, GrainCancellationToken cancellationToken);
+
     [Alias("GetDataAsync")]
     ValueTask<UserData> GetDataAsync(GrainCancellationToken cancellationToken);
 }
@@ -23,15 +32,48 @@ sealed class UserGrain(
     {
         logger.LogTrace(nameof(GetDataAsync));
 
-        var id = Guid.Parse(this.GetPrimaryKeyString());
+        var userId = this.GetPrimaryKey();
 
-        var user = await userRepository.GetWithIdAsync(id, cancellationToken.CancellationToken)
-            ?? throw new Exception($"User not found of ID: {this.GetPrimaryKeyString()}");
+        var user = await userRepository.GetWithIdAsync(userId, cancellationToken.CancellationToken)
+            ?? throw new Exception($"User not found of ID: {userId:N}");
 
-        return new UserData(
-            ID: id,
-            Name: user.Name,
-            Email: user.Email);
+        return user;
+    }
+
+    public async ValueTask<UserData> SetPositionAsync(PointFloat position, GrainCancellationToken cancellationToken)
+    {
+        logger.LogTrace(nameof(SetPositionAsync));
+
+        var userId = this.GetPrimaryKey();
+
+        var data = await userRepository.UpdatePositionAsync(userId, position.X, position.Y)
+            ?? throw new Exception($"User not found of ID: {userId:N}");
+
+        return data;
+    }
+
+    public async ValueTask<UserData> ChangeNameAsync(string newName, GrainCancellationToken cancellationToken)
+    {
+        logger.LogTrace(nameof(ChangeNameAsync));
+
+        var userId = this.GetPrimaryKey();
+
+        var data = await userRepository.UpdateNameAsync(userId, newName)
+            ?? throw new Exception($"User not found of ID: {userId:N}");
+
+        return data;
+    }
+
+    public async ValueTask<UserData> ChangeSkinAsync(byte newSkin, GrainCancellationToken cancellationToken)
+    {
+        logger.LogTrace(nameof(ChangeSkinAsync));
+
+        var userId = this.GetPrimaryKey();
+
+        var data = await userRepository.UpdateSkinAsync(userId, newSkin)
+            ?? throw new Exception($"User not found of ID: {userId:N}");
+
+        return data;
     }
 
     public ValueTask<EchoData> EchoAsync(DateTimeOffset clientTime, DateTimeOffset gatewayTime, GrainCancellationToken cancellationToken)

@@ -15,7 +15,10 @@ public interface IChatRoomGrain : IGrainWithIntegerKey
     ValueTask UnsubscribeAsync(IMapChatObserver mapChat);
 
     [Alias("JoinAsync")]
-    ValueTask JoinAsync(Guid userId, GrainCancellationToken grainCancellationToken);
+    ValueTask JoinAsync(UserData userData, GrainCancellationToken grainCancellationToken);
+
+    [Alias("ChangeNameAsync")]
+    ValueTask ChangeNameAsync(Guid userId, string newName, GrainCancellationToken grainCancellationToken);
 
     [Alias("ChatAsync")]
     ValueTask<ChatData> ChatAsync(Guid userId, string message, GrainCancellationToken grainCancellationToken);
@@ -25,8 +28,7 @@ public interface IChatRoomGrain : IGrainWithIntegerKey
 }
 
 sealed class ChatRoomGrain(
-    ILogger<ChatRoomGrain> logger,
-    IGrainFactory grainFactory)
+    ILogger<ChatRoomGrain> logger)
     : Grain, IChatRoomGrain
 {
     readonly Dictionary<Guid, string> _characterNames = [];
@@ -48,17 +50,33 @@ sealed class ChatRoomGrain(
         return ValueTask.CompletedTask;
     }
 
-    public async ValueTask JoinAsync(Guid userId, GrainCancellationToken grainCancellationToken)
+    public ValueTask JoinAsync(UserData userData, GrainCancellationToken grainCancellationToken)
     {
-        if (!_characterNames.ContainsKey(userId))
-        {
-            var user = grainFactory.GetGrain<IUserGrain>(userId);
-            var userData = await user.GetDataAsync(grainCancellationToken);
-            _characterNames[userId] = userData.Name;
-        }
+        if (!_characterNames.ContainsKey(userData.ID))
+            _characterNames[userData.ID] = userData.Name;
 
         foreach (var chatData in _chats)
             _chatObservers.NotifyIgnoreWarning(o => o.Receive(chatData));
+
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask ChangeNameAsync(Guid userId, string newName, GrainCancellationToken grainCancellationToken)
+    {
+        if (!_characterNames.TryGetValue(userId, out var originalName))
+            throw new ArgumentException($"Character#{userId:N} not found", nameof(userId));
+
+        _characterNames[userId] = newName;
+
+        originalName = CharacterData.CutNameForDisplay(originalName);
+        newName = CharacterData.CutNameForDisplay(newName);
+        var data = new ChatData("<system>", $"Player '{originalName}' change name to '{newName}'");
+
+        _chats.Enqueue(data);
+
+        _chatObservers.NotifyIgnoreWarning(o => o.Receive(data));
+
+        return ValueTask.CompletedTask;
     }
 
     public ValueTask<ChatData> ChatAsync(Guid userId, string message, GrainCancellationToken grainCancellationToken)
@@ -76,19 +94,17 @@ sealed class ChatRoomGrain(
         return ValueTask.FromResult(newData);
     }
 
-    public async ValueTask LeaveAsync(Guid userId, GrainCancellationToken grainCancellationToken)
+    public ValueTask LeaveAsync(Guid userId, GrainCancellationToken grainCancellationToken)
     {
         if (!_characterNames.TryGetValue(userId, out var name))
-        {
-            var user = grainFactory.GetGrain<IUserGrain>(userId);
-            var userData = await user.GetDataAsync(grainCancellationToken);
-            name = userData.Name;
-        }
-        else
-            _characterNames.Remove(userId);
+            throw new ArgumentException($"Character#{userId:N} not found", nameof(userId));
+
+        _characterNames.Remove(userId);
 
         var data = new ChatData(Sender: "<system>", Message: $"{name} leave.");
         _chatObservers.NotifyIgnoreWarning(o => o.Receive(data));
+
+        return ValueTask.CompletedTask;
     }
 }
 
