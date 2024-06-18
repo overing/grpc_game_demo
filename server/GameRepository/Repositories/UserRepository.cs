@@ -79,6 +79,9 @@ internal sealed class UserRepository(
             LastLoginAt = now,
             CreatedAt = now,
             UpdatedAt = now,
+            Skin = 1,
+            PosX = 0,
+            PosY = 0,
         };
         await dbContext.Set<User>().AddAsync(user, cancellationToken);
         var affected = await dbContext.SaveChangesAsync(cancellationToken);

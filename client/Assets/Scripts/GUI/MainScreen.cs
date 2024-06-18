@@ -268,7 +268,7 @@ public sealed class MainScreen : MonoBehaviour
             var path = $"Prefabs/Character{skin:0#}/Character";
             var prefab = Resources.Load<GameObject>(path);
             if (prefab == null)
-                throw new System.IO.FileNotFoundException("Resources not found", path);
+                throw new System.IO.FileNotFoundException($"Resources not found: {path}", path);
             return prefab;
         }
     }
