@@ -25,7 +25,7 @@ public interface IUserRepository
 
     ValueTask<UserData?> UpdateSkinAsync(Guid id, byte newSkin);
 
-    ValueTask<UserData?> UpdatePositionAsync(Guid id, float x, float y);
+    ValueTask UpdatePositionAsync(Guid id, float x, float y);
 
     ValueTask UpdateLoginTimeAsync(Guid id, DateTimeOffset dateTime);
 }
@@ -123,19 +123,11 @@ internal sealed class UserRepository(
         return new(user.ID, user.Name, user.Email, user.Skin, user.PosX, user.PosY);
     }
 
-    public async ValueTask<UserData?> UpdatePositionAsync(Guid id, float x, float y)
+    public async ValueTask UpdatePositionAsync(Guid id, float x, float y)
     {
-        var user = await dbContext.Set<User>().FirstOrDefaultAsync(u => u.ID == id);
-
-        if (user is null)
-            return null;
-
-        (user.PosX, user.PosY) = (x, y);
-        user.UpdatedAt = DateTimeOffset.Now;
-
-        await dbContext.SaveChangesAsync();
-
-        return new(user.ID, user.Name, user.Email, user.Skin, user.PosX, user.PosY);
+        await dbContext.Set<User>()
+            .Where(u => u.ID == id)
+            .ExecuteUpdateAsync(c => c.SetProperty(u => u.PosX, x).SetProperty(u => u.PosY, y).SetProperty(u => u.UpdatedAt, DateTimeOffset.Now));
     }
 
     public async ValueTask UpdateLoginTimeAsync(Guid id, DateTimeOffset dateTime)

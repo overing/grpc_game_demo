@@ -22,7 +22,7 @@ public static class ServiceCollectionGameRepositoryExtensions
             var configuration = provider.GetRequiredService<IConfiguration>();
             var connectionString = configuration.GetConnectionString("cache");
             ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
-            return new RedisConfiguration { ConnectionString = connectionString };
+            return new RedisConfiguration { Name = "session-cache", ConnectionString = connectionString };
         });
         collection.AddSingleton<ISessionRepository, SessionRepository>();
 

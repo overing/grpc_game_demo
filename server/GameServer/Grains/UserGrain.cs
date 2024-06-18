@@ -10,7 +10,7 @@ public interface IUserGrain : IGrainWithGuidKey
     ValueTask<EchoData> EchoAsync(DateTimeOffset clientTime, DateTimeOffset gatewayTime, GrainCancellationToken cancellationToken);
 
     [Alias("SetPositionAsync")]
-    ValueTask<UserData> SetPositionAsync(PointFloat position, GrainCancellationToken cancellationToken);
+    ValueTask SetPositionAsync(PointFloat position, GrainCancellationToken cancellationToken);
 
     [Alias("ChangeNameAsync")]
     ValueTask<UserData> ChangeNameAsync(string newName, GrainCancellationToken cancellationToken);
@@ -40,16 +40,12 @@ sealed class UserGrain(
         return user;
     }
 
-    public async ValueTask<UserData> SetPositionAsync(PointFloat position, GrainCancellationToken cancellationToken)
+    public async ValueTask SetPositionAsync(PointFloat position, GrainCancellationToken cancellationToken)
     {
         logger.LogTrace(nameof(SetPositionAsync));
 
         var userId = this.GetPrimaryKey();
-
-        var data = await userRepository.UpdatePositionAsync(userId, position.X, position.Y)
-            ?? throw new Exception($"User not found of ID: {userId:N}");
-
-        return data;
+        await userRepository.UpdatePositionAsync(userId, position.X, position.Y);
     }
 
     public async ValueTask<UserData> ChangeNameAsync(string newName, GrainCancellationToken cancellationToken)

@@ -28,14 +28,15 @@ public interface IChatRoomGrain : IGrainWithIntegerKey
 }
 
 sealed class ChatRoomGrain(
-    ILogger<ChatRoomGrain> logger)
+    ILogger<ChatRoomGrain> logger,
+    ILogger<ObserverManager<IMapChatObserver>> observerManagerLogger)
     : Grain, IChatRoomGrain
 {
     readonly Dictionary<Guid, string> _characterNames = [];
 
     readonly Queue<ChatData> _chats = [];
 
-    readonly ObserverManager<IMapChatObserver> _chatObservers = new(TimeSpan.FromMinutes(3), logger);
+    readonly ObserverManager<IMapChatObserver> _chatObservers = new(TimeSpan.FromMinutes(3), observerManagerLogger);
 
     public ValueTask SubscribeAsync(IMapChatObserver mapChat)
     {
@@ -127,7 +128,19 @@ sealed class MapChatObserver(
             Sender = data.Sender,
             Message = data.Message,
         };
-        await responseStream.WriteAsync(response, cancellationToken);
-        logger.LogInformation("Write sync chat: {data}", data);
+        if (cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning("Write sync chat canceled");
+            return;
+        }
+        try
+        {
+            await responseStream.WriteAsync(response, cancellationToken);
+            logger.LogInformation("Write sync chat: {data}", data);
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogWarning("Write sync chat canceled");
+        }
     }
 }

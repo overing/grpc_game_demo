@@ -15,6 +15,8 @@ public sealed partial class GameService
     {
         _logger.LogInformation("SyncChat");
 
+        context.GetHttpContext().Response.CancelStartOnAborted();
+
         using var gcts = new GrainCancellationTokenSource();
         using (context.CancellationToken.Register(static state => ((GrainCancellationTokenSource)state!).Cancel().Ignore(), gcts))
         {
@@ -31,13 +33,13 @@ public sealed partial class GameService
                 {
                     var id = Guid.Parse(data.ID);
                     userId = id;
-                    var user = _clusterClient.GetGrain<IUserGrain>(id);
-                    var userData = await user.GetDataAsync(gcts.Token);
 
                     await chatRoom.SubscribeAsync(observerReference);
                     if (joined)
                         continue;
 
+                    var user = _clusterClient.GetGrain<IUserGrain>(id);
+                    var userData = await user.GetDataAsync(gcts.Token);
                     await chatRoom.JoinAsync(userData, gcts.Token);
                     joined = true;
                     _logger.LogInformation("UserId#{userId} join to chat", id);
@@ -45,9 +47,9 @@ public sealed partial class GameService
             }
             catch (OperationCanceledException)
             {
+                await chatRoom.UnsubscribeAsync(observerReference);
                 if (userId is Guid id)
                     await chatRoom.LeaveAsync(id, gcts.Token);
-                await chatRoom.UnsubscribeAsync(observerReference);
             }
         }
     }

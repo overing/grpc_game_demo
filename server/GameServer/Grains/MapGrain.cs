@@ -31,16 +31,13 @@ public interface IMapGrain : IGrainWithIntegerKey
 }
 
 sealed class MapGrain(
-    ILogger<MapGrain> logger)
+    ILogger<MapGrain> logger,
+    ILogger<ObserverManager<IMapCharacterObserver>> observerManagerLogger)
     : Grain, IMapGrain
 {
     readonly Dictionary<Guid, CharacterData> _characters = [];
 
-    readonly ObserverManager<IMapCharacterObserver> _characterObservers = new(TimeSpan.FromMinutes(3), logger);
-
-    readonly Queue<ChatData> _chats = [];
-
-    readonly ObserverManager<IMapChatObserver> _chatObservers = new(TimeSpan.FromMinutes(3), logger);
+    readonly ObserverManager<IMapCharacterObserver> _characterObservers = new(TimeSpan.FromMinutes(3), observerManagerLogger);
 
     public ValueTask SubscribeAsync(IMapCharacterObserver mapCharacter)
     {
@@ -183,8 +180,20 @@ sealed class MapCharacterObserver(
                 response.Skin = characterData.Skin;
                 break;
         }
-        await responseStream.WriteAsync(response, cancellationToken);
-        logger.LogInformation("Write sync character: {data}", data);
+        if (cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning("Write sync character canceled");
+            return;
+        }
+        try
+        {
+            await responseStream.WriteAsync(response, cancellationToken);
+            logger.LogInformation("Write sync character: {data}", data);
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogWarning("Write sync character canceled");
+        }
     }
 }
 

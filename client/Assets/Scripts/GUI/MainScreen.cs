@@ -64,13 +64,13 @@ public sealed class MainScreen : MonoBehaviour
             return;
 
         _chatInputField.text = string.Empty;
-        if (input.Equals("/echo", StringComparison.InvariantCultureIgnoreCase))
+        if (input.Equals("/echo", StringComparison.InvariantCulture))
         {
             _ = EchoAsync();
             return;
         }
 
-        if (input.StartsWith("/name", StringComparison.InvariantCultureIgnoreCase))
+        if (input.StartsWith("/name", StringComparison.InvariantCulture))
         {
             if (ChangeNameCommandPattern.Match(input) is Match match && match.Groups["name"].Value is string newName)
                 _ = ChangeNameAsync(newName);
@@ -79,7 +79,7 @@ public sealed class MainScreen : MonoBehaviour
             return;
         }
 
-        if (input.StartsWith("/skin", StringComparison.InvariantCultureIgnoreCase))
+        if (input.StartsWith("/skin", StringComparison.InvariantCulture))
         {
             if (ChangeSkinCommandPattern.Match(input) is Match match && match.Groups["skin"].Value is string newSkin)
                 _ = ChangeSkinAsync(byte.Parse(newSkin));
@@ -88,7 +88,7 @@ public sealed class MainScreen : MonoBehaviour
             return;
         }
 
-        if (input.Equals("/time", StringComparison.InvariantCultureIgnoreCase))
+        if (input.Equals("/time", StringComparison.InvariantCulture))
         {
             EnqueueChat(_serverTime.Now.ToString("F"));
             return;
@@ -199,83 +199,78 @@ public sealed class MainScreen : MonoBehaviour
             EnqueueChat("Error: " + ex.Message);
             Debug.LogException(ex);
         }
-    }
 
-    void HandleCharacterSync(SyncCharactersResponse response)
-    {
-        switch (response.ActionCase)
+        void HandleCharacterSync(SyncCharactersResponse response)
         {
-            case SyncCharactersResponse.ActionOneofCase.Join:
-                var addId = response.ID;
-                if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == addId) is CharacterController2D forExists)
-                    Destroy(forExists.gameObject);
-                var prefab = LoadCharacterGameObject((byte)response.Join.Skin);
-                var instance = Instantiate(prefab, Vector3.zero, Quaternion.identity, transform);
-                if (addId == _player.ID.ToString("N"))
-                    instance.AddComponent<SendMoveToClickPoint>();
-                instance.name = addId;
-                instance.transform.position = new(response.Join.Position.X, response.Join.Position.Y);
-                instance.GetComponentInChildren<TextMesh>().text = CharacterData.CutNameForDisplay(response.Join.Name);
-                break;
-
-            case SyncCharactersResponse.ActionOneofCase.Leave:
-                var deleteId = response.ID;
-                if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == deleteId) is CharacterController2D forDelete)
-                    Destroy(forDelete.gameObject);
-                else
-                    Debug.LogWarningFormat("Delete id#{0} not found", deleteId);
-                break;
-
-            case SyncCharactersResponse.ActionOneofCase.Move:
-                var moveId = response.ID;
-                if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == moveId) is CharacterController2D forMove)
-                    forMove.SmoothMoveTo(new(response.Move.X, response.Move.Y));
-                else
-                    Debug.LogWarningFormat("Move id#{0} not found", moveId);
-                break;
-
-            case SyncCharactersResponse.ActionOneofCase.Rename:
-                var changeNameId = response.ID;
-                if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == changeNameId) is CharacterController2D forChangeName)
-                    forChangeName.SetName(CharacterData.CutNameForDisplay(response.Rename));
-                else
-                    Debug.LogWarningFormat("ChangeName id#{0} not found", changeNameId);
-                break;
-
-            case SyncCharactersResponse.ActionOneofCase.Skin:
-                var skinId = response.ID;
-                var originalPos = Vector3.zero;
-                var originalName = string.Empty;
-                if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == skinId) is CharacterController2D forSkin)
-                {
-                    originalPos = forSkin.transform.position;
-                    originalName = forSkin.GetComponentInChildren<TextMesh>().text;
-                    Destroy(forSkin.gameObject);
-                }
-                else
+            switch (response.ActionCase)
+            {
+                case SyncCharactersResponse.ActionOneofCase.Join:
+                    var addId = response.ID;
+                    if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == addId) is CharacterController2D forExists)
+                        Destroy(forExists.gameObject);
+                    var prefab = LoadCharacterGameObject((byte)response.Join.Skin);
+                    var instance = Instantiate(prefab, Vector3.zero, Quaternion.identity, transform);
+                    if (addId == _player.ID.ToString("N"))
+                        instance.AddComponent<SendMoveToClickPoint>();
+                    instance.name = addId;
+                    instance.transform.position = new(response.Join.Position.X, response.Join.Position.Y);
+                    instance.GetComponentInChildren<TextMesh>().text = CharacterData.CutNameForDisplay(response.Join.Name);
                     break;
-                var newPrefab = LoadCharacterGameObject((byte)response.Skin);
-                var newInstance = Instantiate(newPrefab, originalPos, Quaternion.identity, transform);
-                if (skinId == _player.ID.ToString("N"))
-                    newInstance.AddComponent<SendMoveToClickPoint>();
-                newInstance.name = skinId;
-                newInstance.GetComponent<CharacterController2D>().SetName(CharacterData.CutNameForDisplay(originalName));
-                break;
+
+                case SyncCharactersResponse.ActionOneofCase.Leave:
+                    var deleteId = response.ID;
+                    if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == deleteId) is CharacterController2D forDelete)
+                        Destroy(forDelete.gameObject);
+                    else
+                        Debug.LogWarningFormat("Delete id#{0} not found", deleteId);
+                    break;
+
+                case SyncCharactersResponse.ActionOneofCase.Move:
+                    var moveId = response.ID;
+                    if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == moveId) is CharacterController2D forMove)
+                        forMove.SmoothMoveTo(new(response.Move.X, response.Move.Y));
+                    else
+                        Debug.LogWarningFormat("Move id#{0} not found", moveId);
+                    break;
+
+                case SyncCharactersResponse.ActionOneofCase.Rename:
+                    var changeNameId = response.ID;
+                    if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == changeNameId) is CharacterController2D forChangeName)
+                        forChangeName.SetName(CharacterData.CutNameForDisplay(response.Rename));
+                    else
+                        Debug.LogWarningFormat("ChangeName id#{0} not found", changeNameId);
+                    break;
+
+                case SyncCharactersResponse.ActionOneofCase.Skin:
+                    var skinId = response.ID;
+                    var originalPos = Vector3.zero;
+                    var originalName = string.Empty;
+                    if (FindObjectsOfType<CharacterController2D>().FirstOrDefault(c => c.name == skinId) is CharacterController2D forSkin)
+                    {
+                        originalPos = forSkin.transform.position;
+                        originalName = forSkin.GetComponentInChildren<TextMesh>().text;
+                        Destroy(forSkin.gameObject);
+                    }
+                    else
+                        break;
+                    var newPrefab = LoadCharacterGameObject((byte)response.Skin);
+                    var newInstance = Instantiate(newPrefab, originalPos, Quaternion.identity, transform);
+                    if (skinId == _player.ID.ToString("N"))
+                        newInstance.AddComponent<SendMoveToClickPoint>();
+                    newInstance.name = skinId;
+                    newInstance.GetComponent<CharacterController2D>().SetName(CharacterData.CutNameForDisplay(originalName));
+                    break;
+            }
         }
-    }
 
-    static GameObject LoadCharacterGameObject(byte skin)
-    {
-        var path = $"Prefabs/Character{skin:0#}/Character";
-        return LoadResourcesGameObject(path);
-    }
-
-    static GameObject LoadResourcesGameObject(string path)
-    {
-        var prefab = Resources.Load<GameObject>(path);
-        if (prefab == null)
-            throw new System.IO.FileNotFoundException("Resources not found", path);
-        return prefab;
+        static GameObject LoadCharacterGameObject(byte skin)
+        {
+            var path = $"Prefabs/Character{skin:0#}/Character";
+            var prefab = Resources.Load<GameObject>(path);
+            if (prefab == null)
+                throw new System.IO.FileNotFoundException("Resources not found", path);
+            return prefab;
+        }
     }
 
     async UniTask SyncChstAsync()
